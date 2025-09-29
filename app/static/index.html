@@ -1,131 +1,133 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <title>GPX World Overview</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
-  />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TrailBlaze GPX Viewer</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/feather-icons"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
-    html, body { height: 100%; margin: 0; }
-    #map { width: 100%; height: calc(100% - 180px); } /* make room for header/footer */
-    header, footer { padding: 8px 12px; font-family: system-ui, sans-serif; }
-    .dropzone {
-      border: 2px dashed #666;
-      border-radius: 8px;
-      padding: 20px;
-      text-align: center;
-      cursor: pointer;
-      background: #fafafa;
-    }
-    .dropzone.dragover { background: #e6f7ff; border-color: #1890ff; }
-    #status {
-      list-style: none;
-      padding: 0;
-      margin-top: 10px;
-      font-family: system-ui, sans-serif;
-      font-size: 0.9em;
-    }
-    #status li.ok { color: green; }
-    #status li.failed { color: red; }
-    #status li.skipped { color: orange; }
+    #map { height: calc(100vh - 200px); z-index: 1; }
+    .dropzone { transition: all 0.3s ease; }
+    .dropzone-active { background-color: #2d3748; border-color: #4a5568; }
   </style>
 </head>
-<body>
-  <header>
-    <h3>GPX World Overview</h3>
-    <div id="dropzone" class="dropzone">
-      <p>Drag & drop GPX files here, or click to select</p>
-      <input id="gpx" type="file" multiple accept=".gpx" hidden />
-    </div>
-    <button id="clearBtn">Delete All Tracks</button>
-    <ul id="status"></ul>
-  </header>
+<body class="bg-gray-900 text-gray-200 min-h-screen">
+  <div class="container mx-auto px-4">
+    <header class="py-6 flex flex-col md:flex-row md:items-center md:justify-between">
+      <h1 class="text-2xl md:text-3xl font-bold text-green-400 flex items-center">
+        <i data-feather="map" class="mr-2"></i> TrailBlaze GPX Viewer
+      </h1>
+      <button id="deleteAll" class="mt-4 md:mt-0 bg-red-700 hover:bg-red-600 text-white px-4 py-2 rounded-lg flex items-center transition">
+        <i data-feather="trash-2" class="mr-2"></i> Delete All Tracks
+      </button>
+    </header>
 
-  <div id="map"></div>
+    <main>
+      <!-- Upload -->
+      <div id="dropzone" class="dropzone border-2 border-dashed border-gray-700 rounded-xl p-8 mb-6 text-center cursor-pointer hover:border-gray-600 transition">
+        <div class="flex flex-col items-center justify-center">
+          <i data-feather="upload-cloud" class="w-12 h-12 text-gray-400 mb-4"></i>
+          <h2 class="text-xl font-semibold mb-2">Upload GPX Files</h2>
+          <p class="text-gray-400 mb-4">Drag & drop GPX files or click to browse</p>
+          <input type="file" id="fileInput" accept=".gpx" multiple class="hidden">
+          <button id="browseBtn" class="bg-green-600 hover:bg-green-500 text-white px-6 py-2 rounded-lg flex items-center transition">
+            <i data-feather="folder" class="mr-2"></i> Browse Files
+          </button>
+        </div>
+      </div>
 
-  <footer>
-    Tiles: © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors
-  </footer>
+      <!-- Status -->
+      <div id="status" class="hidden mb-6 p-4 rounded-lg bg-gray-800 flex items-start">
+        <i data-feather="info" class="mr-3 text-blue-500"></i>
+        <div>
+          <h3 class="font-medium" id="statusTitle">Status</h3>
+          <p class="text-gray-400 text-sm" id="statusMessage">Ready</p>
+        </div>
+      </div>
 
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin="">
-  </script>
+      <!-- Map -->
+      <div id="map" class="rounded-xl overflow-hidden shadow-xl"></div>
+    </main>
+
+    <footer class="py-6 mt-8 text-center text-gray-500 text-sm">
+      <p>Made with <i data-feather="heart" class="inline w-4 h-4 text-red-400"></i> for outdoor adventures</p>
+    </footer>
+  </div>
+
   <script>
-    // --- Map setup ---
+    // Initialize map
     const map = L.map('map', { worldCopyJump: true }).setView([20, 0], 2);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap'
     }).addTo(map);
+
     const colors = {
-      // Endurance
-      running: "red",
-      trail_running: "darkred",
-      cycling: "orange",
-      indoor_cycling: "coral",
-      mountain_biking: "darkorange",
-      walking: "brown",
-      trekking: "saddlebrown",
-      triathlon: "crimson",
-
-      // Water
-      swimming: "blue",
-      open_water_swimming: "royalblue",
-      kayaking: "deepskyblue",
-      canoeing: "lightskyblue",
-      rowing: "steelblue",
-      sailing: "navy",
-      diving: "darkblue",
-
-      // Mountain / Outdoor
-      hiking: "green",
-      mountaineering: "darkgreen",
-      climbing: "limegreen",
-      bouldering: "mediumseagreen",
-      skiing_touring: "forestgreen",
-      cross_country_skiing: "seagreen",
-
-      // Winter
-      alpine_skiing: "cyan",
-      snowboarding: "lightcyan",
-      ice_skating: "teal",
-      ice_hockey: "darkcyan",
-
-      // Strength / Fitness
-      crossfit: "purple",
-      strength_training: "darkviolet",
-      aerobics: "magenta",
-      hiit: "orchid",
-      gym: "plum",
-
-      // Mind & body
-      yoga: "gold",
-      pilates: "khaki",
-      meditation: "beige",
-
-      // Misc
-      chores: "gray",
-      other: "black"
+      running: "red", cycling: "orange", hiking: "green", swimming: "blue",
+      climbing: "limegreen", kayaking: "deepskyblue", skiing: "cyan",
+      yoga: "gold", crossfit: "purple", other: "gray"
     };
 
     const layer = L.geoJSON(null, {
-      style: feature => {
-        const tag = feature.properties.tag;
-        const color = colors[tag] || "black";
-        return {
-          color,
-          weight: 3,
-          opacity: 0.5  // 50% transparent
-        };
-      }
+      style: f => ({
+        color: colors[f.properties.tag] || "white",
+        weight: 4, opacity: 0.6
+      })
     }).addTo(map);
+
+    // DOM refs
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const browseBtn = document.getElementById('browseBtn');
+    const deleteAllBtn = document.getElementById('deleteAll');
+    const statusEl = document.getElementById('status');
+    const statusTitle = document.getElementById('statusTitle');
+    const statusMessage = document.getElementById('statusMessage');
+
+    browseBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+
+    dropzone.addEventListener('dragover', e => {
+      e.preventDefault(); dropzone.classList.add('dropzone-active');
+    });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dropzone-active'));
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault(); dropzone.classList.remove('dropzone-active');
+      handleFiles(e.dataTransfer.files);
+    });
+
+    deleteAllBtn.addEventListener('click', async () => {
+      if (!confirm("Delete all tracks?")) return;
+      try {
+        const res = await fetch("/delete_all", { method: "DELETE" });
+        if (!res.ok) throw new Error(await res.text());
+        layer.clearLayers();
+        showStatus("Success", "All tracks deleted", "success");
+      } catch (err) {
+        showStatus("Error", "Delete failed: " + err.message, "error");
+      }
+    });
+
+    async function handleFiles(files) {
+      if (!files.length) return;
+      const fd = new FormData();
+      for (const f of files) fd.append("files", f);
+
+      showStatus("Uploading", `Uploading ${files.length} file(s)...`, "info");
+      try {
+        const res = await fetch("/upload", { method: "POST", body: fd });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        const msgs = data.results.map(r => `${r.filename}: ${r.status}`).join(", ");
+        showStatus("Upload complete", msgs, "success");
+        await loadTracks();
+      } catch (err) {
+        showStatus("Error", err.message, "error");
+      }
+    }
 
     async function loadTracks() {
       const res = await fetch('/tracks');
@@ -134,75 +136,32 @@
       layer.clearLayers();
       layer.addData(data);
       if (layer.getLayers().length > 0) {
-        map.fitBounds(layer.getBounds(), { padding: [20, 20] });
+        map.fitBounds(layer.getBounds(), { padding: [20,20] });
       }
     }
 
-    // --- Drag & Drop Upload ---
-    const dropzone = document.getElementById("dropzone");
-    const fileInput = document.getElementById("gpx");
-    const statusList = document.getElementById("status");
-
-    dropzone.addEventListener("click", () => fileInput.click());
-
-    dropzone.addEventListener("dragover", e => {
-      e.preventDefault();
-      dropzone.classList.add("dragover");
-    });
-
-    dropzone.addEventListener("dragleave", () => {
-      dropzone.classList.remove("dragover");
-    });
-
-    dropzone.addEventListener("drop", e => {
-      e.preventDefault();
-      dropzone.classList.remove("dragover");
-      handleFiles(e.dataTransfer.files);
-    });
-
-    fileInput.addEventListener("change", e => {
-      handleFiles(e.target.files);
-    });
-
-    async function handleFiles(files) {
-      if (!files.length) return;
-      const fd = new FormData();
-      for (const f of files) fd.append("files", f);
-
-      statusList.innerHTML = `<li>Uploading ${files.length} file(s)...</li>`;
-      try {
-        const res = await fetch("/upload", { method: "POST", body: fd });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-
-        statusList.innerHTML = "";
-        for (const r of data.results) {
-          const li = document.createElement("li");
-          li.textContent = `${r.filename}: ${r.status}${r.reason ? " (" + r.reason + ")" : ""}`;
-          li.className = r.status;
-          statusList.appendChild(li);
-        }
-
-        await loadTracks(); // refresh map after upload
-      } catch (e) {
-        statusList.innerHTML = `<li class="failed">Upload failed: ${e.message || e}</li>`;
+    function showStatus(title, msg, type) {
+      statusEl.classList.remove("hidden");
+      statusTitle.textContent = title;
+      statusMessage.textContent = msg;
+      statusEl.className = "mb-6 p-4 rounded-lg bg-gray-800 flex items-start";
+      const icon = statusEl.querySelector("i");
+      if (type === "error") {
+        icon.setAttribute("data-feather", "alert-circle");
+        statusTitle.className = "font-medium text-red-400";
+      } else if (type === "success") {
+        icon.setAttribute("data-feather", "check-circle");
+        statusTitle.className = "font-medium text-green-400";
+      } else {
+        icon.setAttribute("data-feather", "info");
+        statusTitle.className = "font-medium text-blue-400";
       }
+      feather.replace();
     }
 
-    // initial load
+    // Initial
     loadTracks();
-    document.getElementById("clearBtn").addEventListener("click", async () => {
-      if (!confirm("Are you sure you want to delete all tracks?")) return;
-      try {
-        const res = await fetch("/delete_all", { method: "DELETE" });
-        if (!res.ok) throw new Error(await res.text());
-        statusList.innerHTML = "<li class='ok'>All tracks deleted</li>";
-        layer.clearLayers();
-      } catch (e) {
-        statusList.innerHTML = `<li class="failed">Delete failed: ${e.message || e}</li>`;
-      }
-    });
-
+    feather.replace();
   </script>
 </body>
 </html>
