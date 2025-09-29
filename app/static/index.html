@@ -12,6 +12,19 @@
     #map { height: calc(100vh - 200px); z-index: 1; }
     .dropzone { transition: all 0.3s ease; }
     .dropzone-active { background-color: #2d3748; border-color: #4a5568; }
+    .progress-container { margin-top: 6px; }
+    .progress-bar {
+      height: 6px;
+      border-radius: 3px;
+      background: #2d3748;
+      overflow: hidden;
+    }
+    .progress-bar-inner {
+      height: 100%;
+      width: 0%;
+      background: #48bb78;
+      transition: width 0.2s ease;
+    }
   </style>
 </head>
 <body class="bg-gray-900 text-gray-200 min-h-screen">
@@ -40,12 +53,15 @@
       </div>
 
       <!-- Status -->
-      <div id="status" class="hidden mb-6 p-4 rounded-lg bg-gray-800 flex items-start">
-        <i data-feather="info" class="mr-3 text-blue-500"></i>
-        <div>
-          <h3 class="font-medium" id="statusTitle">Status</h3>
-          <p class="text-gray-400 text-sm" id="statusMessage">Ready</p>
+      <div id="status" class="hidden mb-6 p-4 rounded-lg bg-gray-800 flex flex-col space-y-2">
+        <div class="flex items-start">
+          <i data-feather="info" class="mr-3 text-blue-500"></i>
+          <div>
+            <h3 class="font-medium" id="statusTitle">Status</h3>
+            <p class="text-gray-400 text-sm" id="statusMessage">Ready</p>
+          </div>
         </div>
+        <ul id="uploadList" class="space-y-2"></ul>
       </div>
 
       <!-- Map -->
@@ -86,6 +102,7 @@
     const statusEl = document.getElementById('status');
     const statusTitle = document.getElementById('statusTitle');
     const statusMessage = document.getElementById('statusMessage');
+    const uploadList = document.getElementById('uploadList');
 
     browseBtn.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', () => handleFiles(fileInput.files));
@@ -113,20 +130,79 @@
 
     async function handleFiles(files) {
       if (!files.length) return;
-      const fd = new FormData();
-      for (const f of files) fd.append("files", f);
+      uploadList.innerHTML = "";
+      statusEl.classList.remove("hidden");
+      statusTitle.textContent = "Uploading";
+      statusMessage.textContent = `Uploading ${files.length} file(s)...`;
 
-      showStatus("Uploading", `Uploading ${files.length} file(s)...`, "info");
-      try {
-        const res = await fetch("/upload", { method: "POST", body: fd });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        const msgs = data.results.map(r => `${r.filename}: ${r.status}`).join(", ");
-        showStatus("Upload complete", msgs, "success");
-        await loadTracks();
-      } catch (err) {
-        showStatus("Error", err.message, "error");
+      for (const file of files) {
+        const li = document.createElement("li");
+        li.innerHTML = `
+          <div class="text-sm mb-1">${file.name}</div>
+          <div class="progress-bar"><div class="progress-bar-inner"></div></div>
+          <div class="text-xs text-gray-400 mt-1 status-text">Queued</div>
+        `;
+        uploadList.appendChild(li);
+
+        await uploadFile(file, li);
       }
+
+      await loadTracks();
+    }
+
+    function uploadFile(file, li) {
+      return new Promise((resolve, reject) => {
+        const fd = new FormData();
+        fd.append("files", file);
+
+        const xhr = new XMLHttpRequest();
+        const bar = li.querySelector(".progress-bar-inner");
+        const statusText = li.querySelector(".status-text");
+
+        xhr.upload.onprogress = e => {
+          if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            bar.style.width = percent + "%";
+            statusText.textContent = `Uploading... ${percent}%`;
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              const r = data.results[0];
+              if (r.status === "ok") {
+                bar.style.background = "#48bb78";
+                statusText.textContent = "Uploaded ✓";
+              } else if (r.status === "skipped") {
+                bar.style.background = "#ecc94b";
+                statusText.textContent = `Skipped (${r.reason})`;
+              } else {
+                bar.style.background = "#f56565";
+                statusText.textContent = `Failed (${r.reason})`;
+              }
+            } catch {
+              bar.style.background = "#f56565";
+              statusText.textContent = "Failed (bad response)";
+            }
+            resolve();
+          } else {
+            bar.style.background = "#f56565";
+            statusText.textContent = "Failed (server error)";
+            reject();
+          }
+        };
+
+        xhr.onerror = () => {
+          bar.style.background = "#f56565";
+          statusText.textContent = "Failed (network error)";
+          reject();
+        };
+
+        xhr.open("POST", "/upload");
+        xhr.send(fd);
+      });
     }
 
     async function loadTracks() {
@@ -144,7 +220,7 @@
       statusEl.classList.remove("hidden");
       statusTitle.textContent = title;
       statusMessage.textContent = msg;
-      statusEl.className = "mb-6 p-4 rounded-lg bg-gray-800 flex items-start";
+      statusEl.className = "mb-6 p-4 rounded-lg bg-gray-800 flex flex-col";
       const icon = statusEl.querySelector("i");
       if (type === "error") {
         icon.setAttribute("data-feather", "alert-circle");

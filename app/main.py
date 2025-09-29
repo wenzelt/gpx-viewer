@@ -40,7 +40,8 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.on_event("startup")
 def _startup():
-    init_db()
+    init_db_with_retry()
+
 
 @app.get("/health")
 def health():
@@ -51,27 +52,48 @@ def index():
     # Serve the single-page app
     return FileResponse("static/index.html")
 
+import time
+import sqlalchemy
+
+def init_db_with_retry(max_retries=10, delay=3):
+    for attempt in range(max_retries):
+        try:
+            init_db()
+            return
+        except sqlalchemy.exc.OperationalError as e:
+            print(f"⚠️ DB not ready (attempt {attempt+1}/{max_retries}), retrying...")
+            time.sleep(delay)
+    raise RuntimeError("Database not ready after retries")
+
+
+import logging
+
+logger = logging.getLogger("uvicorn.error")
 
 @app.post("/upload")
 async def upload_gpx(files: List[UploadFile] = File(...)):
+    """
+    Upload one or more GPX files, parse them into LineStrings,
+    deduplicate by file hash, and store in PostGIS.
+    """
     def extract_tag(filename: str) -> str | None:
         # filename format: YYYY-MM-DD_HH.MM.SS-<tag>.gpx
         m = re.match(r".*-(\w+)\.gpx$", filename)
         return m.group(1).lower() if m else None
 
     results = []
+
     with SessionLocal() as db:
         for f in files:
             try:
+                logger.info(f"📂 Upload received: {f.filename}")
                 content = await f.read()
 
                 # --- File size check ---
                 if len(content) > MAX_UPLOAD_MB * 1024 * 1024:
-                    results.append({
-                        "filename": f.filename,
-                        "status": "failed",
-                        "reason": f"File exceeds {MAX_UPLOAD_MB} MB"
-                    })
+                    msg = f"File exceeds {MAX_UPLOAD_MB} MB"
+                    logger.warning(f"{f.filename} rejected: {msg}")
+                    results.append({"filename": f.filename, "status": "failed", "reason": msg})
                     continue
 
                 # --- Compute SHA256 hash ---
@@ -79,34 +101,36 @@ async def upload_gpx(files: List[UploadFile] = File(...)):
 
                 # --- Duplicate detection ---
                 if db.query(Track).filter_by(hash=file_hash).first():
-                    results.append({
-                        "filename": f.filename,
-                        "status": "skipped",
-                        "reason": "Duplicate track"
-                    })
+                    logger.info(f"{f.filename} skipped (duplicate)")
+                    results.append({"filename": f.filename, "status": "skipped", "reason": "Duplicate track"})
                     continue
 
                 # --- Parse GPX ---
-                gpx = gpxpy.parse(io.StringIO(content.decode("utf-8", errors="ignore")))
+                try:
+                    gpx = gpxpy.parse(io.StringIO(content.decode("utf-8", errors="ignore")))
+                except Exception as parse_err:
+                    logger.error(f"Failed to parse {f.filename}: {parse_err}")
+                    results.append({"filename": f.filename, "status": "failed", "reason": "Invalid GPX"})
+                    continue
 
                 lines: list[geom.LineString] = []
+
+                # Tracks
                 for trk in gpx.tracks:
                     for seg in trk.segments:
                         coords = [(p.longitude, p.latitude) for p in seg.points if p.longitude and p.latitude]
                         if len(coords) >= 2:
                             lines.append(geom.LineString(coords))
 
+                # Routes
                 for rte in gpx.routes:
                     coords = [(p.longitude, p.latitude) for p in rte.points if p.longitude and p.latitude]
                     if len(coords) >= 2:
                         lines.append(geom.LineString(coords))
 
                 if not lines:
-                    results.append({
-                        "filename": f.filename,
-                        "status": "skipped",
-                        "reason": "No valid track points"
-                    })
+                    logger.warning(f"{f.filename} has no valid track points")
+                    results.append({"filename": f.filename, "status": "skipped", "reason": "No valid track points"})
                     continue
 
                 # --- Merge & normalize geometry ---
@@ -121,24 +145,23 @@ async def upload_gpx(files: List[UploadFile] = File(...)):
                     name=(gpx.tracks[0].name if gpx.tracks and gpx.tracks[0].name else None),
                     filename=f.filename,
                     tag=extract_tag(f.filename),
-                    hash=file_hash,  # NEW
+                    hash=file_hash,
                     geom=from_shape(mls, srid=4326),
                 )
                 db.add(track)
 
-                results.append({
-                    "filename": f.filename,
-                    "status": "ok"
-                })
+                results.append({"filename": f.filename, "status": "ok"})
+                logger.info(f"{f.filename} saved successfully ✅")
 
             except Exception as e:
-                results.append({
-                    "filename": f.filename,
-                    "status": "failed",
-                    "reason": str(e)
-                })
+                logger.exception(f"Unexpected failure while handling {f.filename}")
+                results.append({"filename": f.filename, "status": "failed", "reason": str(e)})
 
-        db.commit()
+        try:
+            db.commit()
+        except Exception as commit_err:
+            logger.exception("❌ DB commit failed")
+            raise HTTPException(status_code=500, detail=f"DB commit failed: {commit_err}")
 
     return {"results": results}
 
