@@ -51,61 +51,69 @@ def index():
 
 @app.post("/upload")
 async def upload_gpx(files: List[UploadFile] = File(...)):
-    """Upload GPX files, parse and store tracks in the database."""
-    max_size_bytes = MAX_UPLOAD_MB * 1024 * 1024
-
-    saved = 0
+    results = []
     with SessionLocal() as db:
         for f in files:
-            content = await f.read()
-            if len(content) > max_size_bytes:
-                raise HTTPException(status_code=413, detail=f"{f.filename} exceeds {MAX_UPLOAD_MB} MB")
-
             try:
-                gpx = gpxpy.parse(io.StringIO(content.decode("utf-8", errors="ignore")))
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Invalid GPX in {f.filename}: {e}")
+                content = await f.read()
+                if len(content) > MAX_UPLOAD_MB * 1024 * 1024:
+                    results.append({
+                        "filename": f.filename,
+                        "status": "failed",
+                        "reason": f"File exceeds {MAX_UPLOAD_MB} MB"
+                    })
+                    continue
 
-            lines: list[geom.LineString] = []
-            # Extract all track segments into LineStrings (lon, lat)
-            for trk in gpx.tracks:
-                for seg in trk.segments:
-                    coords = [(p.longitude, p.latitude) for p in seg.points if p.longitude is not None and p.latitude is not None]
+                gpx = gpxpy.parse(io.StringIO(content.decode("utf-8", errors="ignore")))
+
+                lines: list[geom.LineString] = []
+                for trk in gpx.tracks:
+                    for seg in trk.segments:
+                        coords = [(p.longitude, p.latitude) for p in seg.points if p.longitude and p.latitude]
+                        if len(coords) >= 2:
+                            lines.append(geom.LineString(coords))
+
+                for rte in gpx.routes:
+                    coords = [(p.longitude, p.latitude) for p in rte.points if p.longitude and p.latitude]
                     if len(coords) >= 2:
                         lines.append(geom.LineString(coords))
 
-            # Also consider routes (optional)
-            for rte in gpx.routes:
-                coords = [(p.longitude, p.latitude) for p in rte.points if p.longitude is not None and p.latitude is not None]
-                if len(coords) >= 2:
-                    lines.append(geom.LineString(coords))
+                if not lines:
+                    results.append({
+                        "filename": f.filename,
+                        "status": "skipped",
+                        "reason": "No valid track points"
+                    })
+                    continue
 
-            if not lines:
-                # Nothing to store
-                continue
-
-            # Merge adjacent segments if possible
-            try:
                 merged = linemerge(geom.MultiLineString(lines))
                 if isinstance(merged, geom.LineString):
                     mls = geom.MultiLineString([merged.coords])
                 else:
-                    mls = merged  # already MultiLineString
-            except Exception:
-                mls = geom.MultiLineString([ln.coords for ln in lines])
+                    mls = merged
 
-            track = Track(
-                name=(gpx.tracks[0].name if gpx.tracks and gpx.tracks[0].name else None),
-                created_at=datetime.utcnow(),
-                filename=f.filename,
-                geom=from_shape(mls, srid=4326)
-            )
-            db.add(track)
-            saved += 1
+                track = Track(
+                    name=(gpx.tracks[0].name if gpx.tracks and gpx.tracks[0].name else None),
+                    filename=f.filename,
+                    geom=from_shape(mls, srid=4326),
+                )
+                db.add(track)
+
+                results.append({
+                    "filename": f.filename,
+                    "status": "ok"
+                })
+
+            except Exception as e:
+                results.append({
+                    "filename": f.filename,
+                    "status": "failed",
+                    "reason": str(e)
+                })
 
         db.commit()
 
-    return {"status": "ok", "saved": saved}
+    return {"results": results}
 
 @app.get("/tracks")
 def get_tracks():
