@@ -13,6 +13,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+import hashlib
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -50,6 +51,7 @@ def index():
     # Serve the single-page app
     return FileResponse("static/index.html")
 
+
 @app.post("/upload")
 async def upload_gpx(files: List[UploadFile] = File(...)):
     def extract_tag(filename: str) -> str | None:
@@ -57,12 +59,13 @@ async def upload_gpx(files: List[UploadFile] = File(...)):
         m = re.match(r".*-(\w+)\.gpx$", filename)
         return m.group(1).lower() if m else None
 
-
     results = []
     with SessionLocal() as db:
         for f in files:
             try:
                 content = await f.read()
+
+                # --- File size check ---
                 if len(content) > MAX_UPLOAD_MB * 1024 * 1024:
                     results.append({
                         "filename": f.filename,
@@ -71,6 +74,19 @@ async def upload_gpx(files: List[UploadFile] = File(...)):
                     })
                     continue
 
+                # --- Compute SHA256 hash ---
+                file_hash = hashlib.sha256(content).hexdigest()
+
+                # --- Duplicate detection ---
+                if db.query(Track).filter_by(hash=file_hash).first():
+                    results.append({
+                        "filename": f.filename,
+                        "status": "skipped",
+                        "reason": "Duplicate track"
+                    })
+                    continue
+
+                # --- Parse GPX ---
                 gpx = gpxpy.parse(io.StringIO(content.decode("utf-8", errors="ignore")))
 
                 lines: list[geom.LineString] = []
@@ -93,19 +109,21 @@ async def upload_gpx(files: List[UploadFile] = File(...)):
                     })
                     continue
 
+                # --- Merge & normalize geometry ---
                 merged = linemerge(geom.MultiLineString(lines))
                 if isinstance(merged, geom.LineString):
                     mls = geom.MultiLineString([merged.coords])
                 else:
                     mls = merged
 
+                # --- Save track ---
                 track = Track(
                     name=(gpx.tracks[0].name if gpx.tracks and gpx.tracks[0].name else None),
                     filename=f.filename,
                     tag=extract_tag(f.filename),
+                    hash=file_hash,  # NEW
                     geom=from_shape(mls, srid=4326),
                 )
-
                 db.add(track)
 
                 results.append({
@@ -123,6 +141,7 @@ async def upload_gpx(files: List[UploadFile] = File(...)):
         db.commit()
 
     return {"results": results}
+
 
 @app.get("/tracks")
 def get_tracks():
