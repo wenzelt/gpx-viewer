@@ -1,11 +1,13 @@
+from __future__ import annotations
+
 from datetime import datetime
-from sqlalchemy.orm import declarative_base, Mapped, mapped_column
-from sqlalchemy import Integer, String, DateTime
+from typing import Any
+
 from geoalchemy2 import Geometry
+from sqlalchemy import Integer, String, DateTime, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, declarative_base
 
 Base = declarative_base()
-
-from sqlalchemy import UniqueConstraint
 
 class Track(Base):
     __tablename__ = "tracks"
@@ -15,8 +17,12 @@ class Track(Base):
     filename: Mapped[str | None] = mapped_column(String, nullable=True)
     tag: Mapped[str | None] = mapped_column(String, nullable=True)
     hash: Mapped[str] = mapped_column(String, nullable=False)
-    name: Mapped[str | None] = mapped_column(String, nullable=True)  # <-- ADD THIS
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    geom = mapped_column(
+    # GeoAlchemy Geometry column; typing as Any to keep mypy happy
+    geom: Mapped[Any] = mapped_column(
         Geometry(geometry_type="MULTILINESTRING", srid=4326, spatial_index=True)
     )
+
+    def __repr__(self) -> str:
+        return f"Track(id={self.id!r}, filename={self.filename!r}, tag={self.tag!r})"

@@ -1,3 +1,4 @@
+
 services:
   db:
     image: postgis/postgis:16-3.4
@@ -27,6 +28,8 @@ services:
       UVICORN_HOST: 0.0.0.0
       UVICORN_PORT: 8000
       MAX_UPLOAD_MB: "50"
+      # optional: comma-separated list for stricter CORS in prod
+      # ALLOWED_ORIGINS: "https://your.domain"
     depends_on:
       db:
         condition: service_healthy
@@ -34,26 +37,12 @@ services:
       - "8000:8000"
     volumes:
       - uploads:/app/uploads
-
-  # OPTIONAL: reverse proxy with Caddy if you want HTTPS + domain
-  # caddy:
-  #   image: caddy:2
-  #   container_name: gpx_caddy
-  #   restart: unless-stopped
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   environment:
-  #     - DOMAIN=your.domain.tld
-  #   volumes:
-  #     - ./Caddyfile:/etc/caddy/Caddyfile:ro
-  #     - caddy_data:/data
-  #     - caddy_config:/config
-  #   depends_on:
-  #     - app
+    # Security hardening (optional, remove if it breaks local dev)
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
+    #   - /app/uploads:size=100m,mode=0777
 
 volumes:
   pgdata:
   uploads:
-  # caddy_data:
-  # caddy_config:

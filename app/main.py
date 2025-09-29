@@ -1,199 +1,269 @@
 from __future__ import annotations
 
 import io
-import re
 import os
+import re
+import time
+import hashlib
+import logging
 from datetime import datetime
-from typing import List
+from typing import Iterable, List, Optional
 
 import gpxpy
-import shapely.geometry as geom
-from shapely.ops import linemerge
+import sqlalchemy
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-import hashlib
-
-from sqlalchemy import select
-from sqlalchemy.orm import Session
 from geoalchemy2.shape import from_shape, to_shape
+from shapely.geometry import LineString, MultiLineString
+from shapely.ops import linemerge
+from sqlalchemy import select, exists, delete
+from sqlalchemy.orm import Session
 
 from db import SessionLocal, init_db
 from models import Track
 
-MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "50"))
+# ------------------------------------------------------------------------------
+# Settings
+# ------------------------------------------------------------------------------
+MAX_UPLOAD_MB: int = int(os.environ.get("MAX_UPLOAD_MB", "50"))
+ALLOWED_ORIGINS: list[str] = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
+APP_TITLE = "Local GPX Viewer"
+APP_VERSION = "1.1"
 
-app = FastAPI(title="Local GPX Viewer", version="1.0")
+# ------------------------------------------------------------------------------
+# App & Middleware
+# ------------------------------------------------------------------------------
+app = FastAPI(title=APP_TITLE, version=APP_VERSION)
 
-# CORS (adjust origins if exposing on the internet)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # change to your domain if needed
+    allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS != ["*"] else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# static UI
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+logger = logging.getLogger("uvicorn.error")
+
+# ------------------------------------------------------------------------------
+# Startup
+# ------------------------------------------------------------------------------
 @app.on_event("startup")
-def _startup():
+def _startup() -> None:
     init_db_with_retry()
 
+def init_db_with_retry(max_retries: int = 10, delay: int = 3) -> None:
+    for attempt in range(1, max_retries + 1):
+        try:
+            init_db()
+            logger.info("✅ Database initialized")
+            return
+        except sqlalchemy.exc.OperationalError:
+            logger.warning("⚠️ DB not ready (attempt %s/%s), retrying...", attempt, max_retries)
+            time.sleep(delay)
+    raise RuntimeError("Database not ready after retries")
 
+# ------------------------------------------------------------------------------
+# Helpers (pure & testable)
+# ------------------------------------------------------------------------------
+_FILENAME_TAG_RE = re.compile(r".*-(\w+)\.gpx$", re.IGNORECASE)
+
+def extract_tag(filename: str) -> Optional[str]:
+    m = _FILENAME_TAG_RE.match(filename)
+    return m.group(1).lower() if m else None
+
+def compute_sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+def bytes_exceeds_limit(b: bytes, limit_mb: int) -> bool:
+    return len(b) > (limit_mb * 1024 * 1024)
+
+def _coords_from_points(points: Iterable) -> list[tuple[float, float]]:
+    # Filters out points without both lon/lat, keeps only 2D
+    out: list[tuple[float, float]] = []
+    for p in points:
+        lon = getattr(p, "longitude", None)
+        lat = getattr(p, "latitude", None)
+        if lon is None or lat is None:
+            continue
+        out.append((float(lon), float(lat)))
+    return out
+
+def _lines_from_gpx(gpx: gpxpy.gpx.GPX) -> list[LineString]:
+    lines: list[LineString] = []
+
+    # Tracks → segments
+    for trk in gpx.tracks:
+        for seg in trk.segments:
+            coords = _coords_from_points(seg.points)
+            if len(coords) >= 2:
+                lines.append(LineString(coords))
+
+    # Routes
+    for rte in gpx.routes:
+        coords = _coords_from_points(rte.points)
+        if len(coords) >= 2:
+            lines.append(LineString(coords))
+
+    return lines
+
+def _merge_to_multilinestring(lines: list[LineString]) -> MultiLineString:
+    """
+    Merge lines and return a MultiLineString. Always returns MultiLineString.
+    """
+    if not lines:
+        raise ValueError("No lines to merge")
+
+    merged = linemerge(MultiLineString([list(ls.coords) for ls in lines]))
+    if isinstance(merged, LineString):
+        return MultiLineString([list(merged.coords)])
+    if isinstance(merged, MultiLineString):
+        # Normalize to plain python lists to avoid GeoAlchemy serialization quirks
+        return MultiLineString([list(geom.coords) for geom in merged.geoms])
+
+    # Fallback: wrap original lines
+    return MultiLineString([list(ls.coords) for ls in lines])
+
+def _track_name(gpx: gpxpy.gpx.GPX) -> Optional[str]:
+    try:
+        return gpx.tracks[0].name or None
+    except Exception:
+        return None
+
+def _is_duplicate_hash(db: Session, file_hash: str) -> bool:
+    stmt = select(exists().where(Track.hash == file_hash))
+    return bool(db.execute(stmt).scalar())
+
+# ------------------------------------------------------------------------------
+# Routes
+# ------------------------------------------------------------------------------
 @app.get("/health")
 def health():
     return {"status": "ok", "time_utc": datetime.utcnow().isoformat()}
 
 @app.get("/", response_class=HTMLResponse)
 def index():
-    # Serve the single-page app
     return FileResponse("static/index.html")
-
-import time
-import sqlalchemy
-
-def init_db_with_retry(max_retries=10, delay=3):
-    for attempt in range(max_retries):
-        try:
-            init_db()
-            return
-        except sqlalchemy.exc.OperationalError as e:
-            print(f"⚠️ DB not ready (attempt {attempt+1}/{max_retries}), retrying...")
-            time.sleep(delay)
-    raise RuntimeError("Database not ready after retries")
-
-
-import logging
-
-logger = logging.getLogger("uvicorn.error")
 
 @app.post("/upload")
 async def upload_gpx(files: List[UploadFile] = File(...)):
     """
-    Upload one or more GPX files, parse them into LineStrings,
-    deduplicate by file hash, and store in PostGIS.
+    Upload one or more GPX files, parse into MultiLineStrings,
+    deduplicate by content hash, and store in PostGIS.
     """
-    def extract_tag(filename: str) -> str | None:
-        # filename format: YYYY-MM-DD_HH.MM.SS-<tag>.gpx
-        m = re.match(r".*-(\w+)\.gpx$", filename)
-        return m.group(1).lower() if m else None
-
-    results = []
+    results: list[dict] = []
 
     with SessionLocal() as db:
         for f in files:
+            filename = f.filename or "unknown.gpx"
             try:
-                logger.info(f"📂 Upload received: {f.filename}")
-                content = await f.read()
+                logger.info("📂 Upload received: %s", filename)
+                content: bytes = await f.read()
 
-                # --- File size check ---
-                if len(content) > MAX_UPLOAD_MB * 1024 * 1024:
+                # Size check (after read; multipart size header is not reliable)
+                if bytes_exceeds_limit(content, MAX_UPLOAD_MB):
                     msg = f"File exceeds {MAX_UPLOAD_MB} MB"
-                    logger.warning(f"{f.filename} rejected: {msg}")
-                    results.append({"filename": f.filename, "status": "failed", "reason": msg})
+                    logger.warning("%s rejected: %s", filename, msg)
+                    results.append({"filename": filename, "status": "failed", "reason": msg})
                     continue
 
-                # --- Compute SHA256 hash ---
-                file_hash = hashlib.sha256(content).hexdigest()
+                file_hash = compute_sha256(content)
 
-                # --- Duplicate detection ---
-                if db.query(Track).filter_by(hash=file_hash).first():
-                    logger.info(f"{f.filename} skipped (duplicate)")
-                    results.append({"filename": f.filename, "status": "skipped", "reason": "Duplicate track"})
+                # Fast duplicate check
+                if _is_duplicate_hash(db, file_hash):
+                    logger.info("%s skipped (duplicate)", filename)
+                    results.append({"filename": filename, "status": "skipped", "reason": "Duplicate track"})
                     continue
 
-                # --- Parse GPX ---
+                # Parse GPX (decode robustly, ignore undecodable chars)
                 try:
                     gpx = gpxpy.parse(io.StringIO(content.decode("utf-8", errors="ignore")))
                 except Exception as parse_err:
-                    logger.error(f"Failed to parse {f.filename}: {parse_err}")
-                    results.append({"filename": f.filename, "status": "failed", "reason": "Invalid GPX"})
+                    logger.error("Failed to parse %s: %s", filename, parse_err)
+                    results.append({"filename": filename, "status": "failed", "reason": "Invalid GPX"})
                     continue
 
-                lines: list[geom.LineString] = []
-
-                # Tracks
-                for trk in gpx.tracks:
-                    for seg in trk.segments:
-                        coords = [(p.longitude, p.latitude) for p in seg.points if p.longitude and p.latitude]
-                        if len(coords) >= 2:
-                            lines.append(geom.LineString(coords))
-
-                # Routes
-                for rte in gpx.routes:
-                    coords = [(p.longitude, p.latitude) for p in rte.points if p.longitude and p.latitude]
-                    if len(coords) >= 2:
-                        lines.append(geom.LineString(coords))
-
+                lines = _lines_from_gpx(gpx)
                 if not lines:
-                    logger.warning(f"{f.filename} has no valid track points")
-                    results.append({"filename": f.filename, "status": "skipped", "reason": "No valid track points"})
+                    logger.warning("%s has no valid track points", filename)
+                    results.append({"filename": filename, "status": "skipped", "reason": "No valid track points"})
                     continue
 
-                # --- Merge & normalize geometry ---
-                merged = linemerge(geom.MultiLineString(lines))
-                if isinstance(merged, geom.LineString):
-                    mls = geom.MultiLineString([merged.coords])
-                else:
-                    mls = merged
+                mls = _merge_to_multilinestring(lines)
 
-                # --- Save track ---
                 track = Track(
-                    name=(gpx.tracks[0].name if gpx.tracks and gpx.tracks[0].name else None),
-                    filename=f.filename,
-                    tag=extract_tag(f.filename),
+                    name=_track_name(gpx),
+                    filename=filename,
+                    tag=extract_tag(filename),
                     hash=file_hash,
                     geom=from_shape(mls, srid=4326),
                 )
                 db.add(track)
-
-                results.append({"filename": f.filename, "status": "ok"})
-                logger.info(f"{f.filename} saved successfully ✅")
+                results.append({"filename": filename, "status": "ok"})
+                logger.info("%s saved successfully ✅", filename)
 
             except Exception as e:
-                logger.exception(f"Unexpected failure while handling {f.filename}")
-                results.append({"filename": f.filename, "status": "failed", "reason": str(e)})
+                logger.exception("Unexpected failure while handling %s", filename)
+                results.append({"filename": filename, "status": "failed", "reason": str(e)})
 
+        # Single commit for batch (fewer round-trips)
         try:
             db.commit()
+        except sqlalchemy.exc.IntegrityError as ie:
+            # In case a hash race slipped through the exists() check
+            db.rollback()
+            logger.warning("Integrity error on commit (likely duplicate): %s", ie)
+            # Mark undetected duplicates as skipped in results for transparency
+            for r in results:
+                if r["status"] == "ok":
+                    r["status"] = "skipped"
+                    r["reason"] = "Duplicate (constraint)"
         except Exception as commit_err:
+            db.rollback()
             logger.exception("❌ DB commit failed")
             raise HTTPException(status_code=500, detail=f"DB commit failed: {commit_err}")
 
     return {"results": results}
 
-
 @app.get("/tracks")
 def get_tracks():
     """Return all tracks as a GeoJSON FeatureCollection."""
-    features = []
+    features: list[dict] = []
     with SessionLocal() as db:
         for t in db.execute(select(Track)).scalars():
-            shp = to_shape(t.geom)  # shapely MultiLineString
-            # Build minimal GeoJSON feature
+            shp = to_shape(t.geom)  # shapely geometry
+            # Ensure MultiLineString in output
+            if isinstance(shp, LineString):
+                shp = MultiLineString([list(shp.coords)])
+            elif isinstance(shp, MultiLineString):
+                # normalize to basic lists for JSON safety
+                shp = MultiLineString([list(geom.coords) for geom in shp.geoms])
+
+            coordinates: list[list[tuple[float, float]]] = (
+                [list(line.coords) for line in shp.geoms]  # type: ignore[attr-defined]
+                if hasattr(shp, "geoms")
+                else [list(shp.coords)]  # type: ignore[arg-type]
+            )
+
             features.append({
                 "type": "Feature",
                 "properties": {
                     "id": t.id,
                     "name": t.name or t.filename or f"Track {t.id}",
                     "tag": t.tag,
-                    "created_at": t.created_at.isoformat() + "Z",
+                    "created_at": (t.created_at.isoformat() + "Z") if t.created_at else None,
                 },
-                "geometry": {
-                    "type": "MultiLineString",
-                    "coordinates": [list(line.coords) for line in shp.geoms] if hasattr(shp, "geoms") else [list(shp.coords)]
-                },
+                "geometry": {"type": "MultiLineString", "coordinates": coordinates},
             })
     return JSONResponse({"type": "FeatureCollection", "features": features})
-
-from sqlalchemy import delete
 
 @app.delete("/delete_all")
 def delete_all_tracks():
     with SessionLocal() as db:
-        db.execute(delete(Track))   # delete all rows
+        db.execute(delete(Track))
         db.commit()
     return {"status": "ok", "deleted": "all"}
