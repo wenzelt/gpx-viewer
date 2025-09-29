@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import re
 import os
 from datetime import datetime
 from typing import List
@@ -51,6 +52,12 @@ def index():
 
 @app.post("/upload")
 async def upload_gpx(files: List[UploadFile] = File(...)):
+    def extract_tag(filename: str) -> str | None:
+        # filename format: YYYY-MM-DD_HH.MM.SS-<tag>.gpx
+        m = re.match(r".*-(\w+)\.gpx$", filename)
+        return m.group(1).lower() if m else None
+
+
     results = []
     with SessionLocal() as db:
         for f in files:
@@ -95,8 +102,10 @@ async def upload_gpx(files: List[UploadFile] = File(...)):
                 track = Track(
                     name=(gpx.tracks[0].name if gpx.tracks and gpx.tracks[0].name else None),
                     filename=f.filename,
+                    tag=extract_tag(f.filename),
                     geom=from_shape(mls, srid=4326),
                 )
+
                 db.add(track)
 
                 results.append({
@@ -128,6 +137,7 @@ def get_tracks():
                 "properties": {
                     "id": t.id,
                     "name": t.name or t.filename or f"Track {t.id}",
+                    "tag": t.tag,
                     "created_at": t.created_at.isoformat() + "Z",
                 },
                 "geometry": {

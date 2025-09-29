@@ -64,8 +64,68 @@
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap'
     }).addTo(map);
+    const colors = {
+      // Endurance
+      running: "red",
+      trail_running: "darkred",
+      cycling: "orange",
+      indoor_cycling: "coral",
+      mountain_biking: "darkorange",
+      walking: "brown",
+      trekking: "saddlebrown",
+      triathlon: "crimson",
 
-    const layer = L.geoJSON(null, { style: { weight: 3 } }).addTo(map);
+      // Water
+      swimming: "blue",
+      open_water_swimming: "royalblue",
+      kayaking: "deepskyblue",
+      canoeing: "lightskyblue",
+      rowing: "steelblue",
+      sailing: "navy",
+      diving: "darkblue",
+
+      // Mountain / Outdoor
+      hiking: "green",
+      mountaineering: "darkgreen",
+      climbing: "limegreen",
+      bouldering: "mediumseagreen",
+      skiing_touring: "forestgreen",
+      cross_country_skiing: "seagreen",
+
+      // Winter
+      alpine_skiing: "cyan",
+      snowboarding: "lightcyan",
+      ice_skating: "teal",
+      ice_hockey: "darkcyan",
+
+      // Strength / Fitness
+      crossfit: "purple",
+      strength_training: "darkviolet",
+      aerobics: "magenta",
+      hiit: "orchid",
+      gym: "plum",
+
+      // Mind & body
+      yoga: "gold",
+      pilates: "khaki",
+      meditation: "beige",
+
+      // Misc
+      chores: "gray",
+      other: "black"
+    };
+
+    const layer = L.geoJSON(null, {
+      style: feature => {
+        const tag = feature.properties.tag;
+        const color = colors[tag] || "black";
+        return {
+          color,
+          weight: 3,
+          opacity: 0.5  // 50% transparent
+        };
+      }
+    }).addTo(map);
 
     async function loadTracks() {
       const res = await fetch('/tracks');
