@@ -136,3 +136,12 @@ def get_tracks():
                 },
             })
     return JSONResponse({"type": "FeatureCollection", "features": features})
+
+from sqlalchemy import delete
+
+@app.delete("/delete_all")
+def delete_all_tracks():
+    with SessionLocal() as db:
+        db.execute(delete(Track))   # delete all rows
+        db.commit()
+    return {"status": "ok", "deleted": "all"}

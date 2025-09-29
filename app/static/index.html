@@ -42,6 +42,7 @@
       <p>Drag & drop GPX files here, or click to select</p>
       <input id="gpx" type="file" multiple accept=".gpx" hidden />
     </div>
+    <button id="clearBtn">Delete All Tracks</button>
     <ul id="status"></ul>
   </header>
 
@@ -130,6 +131,18 @@
 
     // initial load
     loadTracks();
+    document.getElementById("clearBtn").addEventListener("click", async () => {
+      if (!confirm("Are you sure you want to delete all tracks?")) return;
+      try {
+        const res = await fetch("/delete_all", { method: "DELETE" });
+        if (!res.ok) throw new Error(await res.text());
+        statusList.innerHTML = "<li class='ok'>All tracks deleted</li>";
+        layer.clearLayers();
+      } catch (e) {
+        statusList.innerHTML = `<li class="failed">Delete failed: ${e.message || e}</li>`;
+      }
+    });
+
   </script>
 </body>
 </html>
