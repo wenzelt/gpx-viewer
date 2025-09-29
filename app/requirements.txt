@@ -1,0 +1,8 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+SQLAlchemy==2.0.34
+psycopg2-binary==2.9.9
+geoalchemy2==0.15.2
+shapely==2.0.6
+gpxpy==1.6.2
+python-multipart==0.0.9

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>GPX World Overview</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #map { width: 100%; height: calc(100% - 120px); }
+    header, footer { padding: 8px 12px; font-family: system-ui, sans-serif; }
+    .upload { display: flex; gap: 8px; align-items: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <h3>GPX World Overview</h3>
+    <div class="upload">
+      <input id="gpx" type="file" multiple accept=".gpx"/>
+      <button id="btn">Upload</button>
+      <span id="msg"></span>
+    </div>
+  </header>
+  <div id="map"></div>
+  <footer>
+    Tiles: © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors
+  </footer>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin="">
+  </script>
+  <script>
+    const map = L.map('map', { worldCopyJump: true }).setView([20, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    const layer = L.geoJSON(null, {
+      style: { weight: 3 }
+    }).addTo(map);
+
+    async function loadTracks() {
+      const res = await fetch('/tracks');
+      const data = await res.json();
+      layer.clearLayers();
+      layer.addData(data);
+      try { map.fitBounds(layer.getBounds(), { padding: [20, 20] }); } catch (e) {}
+    }
+
+    async function uploadFiles() {
+      const input = document.getElementById('gpx');
+      const msg = document.getElementById('msg');
+      if (!input.files.length) { msg.textContent = 'Select one or more .gpx files'; return; }
+      const fd = new FormData();
+      for (const f of input.files) fd.append('files', f);
+      msg.textContent = 'Uploading...';
+      try {
+        const res = await fetch('/upload', { method: 'POST', body: fd });
+        if (!res.ok) { throw new Error(await res.text()); }
+        await loadTracks();
+        msg.textContent = 'Uploaded ✔';
+        input.value = '';
+      } catch (e) {
+        msg.textContent = 'Upload failed: ' + (e.message || e);
+      }
+    }
+
+    document.getElementById('btn').addEventListener('click', uploadFiles);
+    loadTracks();
+  </script>
+</body>
+</html>
