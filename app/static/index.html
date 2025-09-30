@@ -10,6 +10,9 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     #map { height: calc(100vh - 200px); z-index: 1; }
+    #mapLoader {
+      backdrop-filter: blur(2px);
+    }
     .dropzone { transition: all 0.3s ease; }
     .dropzone-active { background-color: #2d3748; border-color: #4a5568; }
     .progress-container { margin-top: 6px; }
@@ -65,7 +68,13 @@
       </div>
 
       <!-- Map -->
-      <div id="map" class="rounded-xl overflow-hidden shadow-xl"></div>
+      <div class="relative rounded-xl overflow-hidden shadow-xl">
+        <div id="map" class="w-full"></div>
+        <div id="mapLoader" class="absolute inset-0 flex flex-col items-center justify-center space-y-3 bg-black/60 text-gray-100 hidden">
+          <div class="w-10 h-10 border-4 border-green-400 border-t-transparent rounded-full animate-spin"></div>
+          <p id="mapLoaderMessage" class="text-sm tracking-wide uppercase">Loading tracks…</p>
+        </div>
+      </div>
     </main>
 
     <footer class="py-6 mt-8 text-center text-gray-500 text-sm">
@@ -148,6 +157,12 @@
     const statusTitle = document.getElementById('statusTitle');
     const statusMessage = document.getElementById('statusMessage');
     const uploadList = document.getElementById('uploadList');
+    const mapLoader = document.getElementById('mapLoader');
+    const mapLoaderMessage = document.getElementById('mapLoaderMessage');
+
+    let currentTracksEtag = null;
+    let activeTracksController = null;
+    let tracksRetryHandle = null;
 
     browseBtn.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', () => handleFiles(fileInput.files));
@@ -163,13 +178,19 @@
 
     deleteAllBtn.addEventListener('click', async () => {
       if (!confirm("Delete all tracks?")) return;
+      deleteAllBtn.disabled = true;
+      deleteAllBtn.classList.add('opacity-60', 'cursor-not-allowed');
       try {
         const res = await fetch("/delete_all", { method: "DELETE" });
         if (!res.ok) throw new Error(await res.text());
         layer.clearLayers();
-        showStatus("Success", "All tracks deleted", "success");
+        currentTracksEtag = null;
+        await loadTracks({ force: true });
       } catch (err) {
         showStatus("Error", "Delete failed: " + err.message, "error");
+      } finally {
+        deleteAllBtn.disabled = false;
+        deleteAllBtn.classList.remove('opacity-60', 'cursor-not-allowed');
       }
     });
 
@@ -192,7 +213,8 @@
         await uploadFile(file, li);
       }
 
-      await loadTracks();
+      currentTracksEtag = null;
+      await loadTracks({ force: true });
     }
 
     function uploadFile(file, li) {
@@ -250,22 +272,84 @@
       });
     }
 
-    async function loadTracks() {
-      const res = await fetch('/tracks');
-      if (!res.ok) return;
-      const data = await res.json();
-      layer.clearLayers();
-      layer.addData(data);
-      if (layer.getLayers().length > 0) {
-        map.fitBounds(layer.getBounds(), { padding: [20,20] });
+    function toggleMapLoader(show, message = 'Loading tracks…') {
+      if (!mapLoader) return;
+      if (message && mapLoaderMessage) {
+        mapLoaderMessage.textContent = message;
       }
+      if (show) {
+        mapLoader.classList.remove('hidden');
+      } else {
+        mapLoader.classList.add('hidden');
+      }
+    }
+
+    async function loadTracks({ force = false } = {}) {
+      if (activeTracksController) {
+        activeTracksController.abort();
+      }
+
+      const controller = new AbortController();
+      activeTracksController = controller;
+
+      toggleMapLoader(true, force ? 'Refreshing tracks…' : 'Loading tracks…');
+
+      const headers = { 'Cache-Control': 'no-cache' };
+      if (!force && currentTracksEtag) {
+        headers['If-None-Match'] = currentTracksEtag;
+      }
+
+      try {
+        const res = await fetch('/tracks', { signal: controller.signal, headers });
+
+        if (res.status === 304) {
+          return;
+        }
+
+        if (!res.ok) {
+          throw new Error(`Failed to load (${res.status})`);
+        }
+
+        const data = await res.json();
+        currentTracksEtag = res.headers.get('ETag');
+        layer.clearLayers();
+        layer.addData(data);
+        if (tracksRetryHandle) {
+          clearTimeout(tracksRetryHandle);
+          tracksRetryHandle = null;
+        }
+        hideStatus();
+        if (layer.getLayers().length > 0) {
+          map.fitBounds(layer.getBounds(), { padding: [20,20] });
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        console.error(err);
+        showStatus("Error", "Failed to load GPX tracks. Retrying shortly…", "error");
+        if (tracksRetryHandle) {
+          clearTimeout(tracksRetryHandle);
+        }
+        tracksRetryHandle = setTimeout(() => {
+          tracksRetryHandle = null;
+          loadTracks({ force: true });
+        }, 4000);
+      } finally {
+        if (activeTracksController === controller) {
+          activeTracksController = null;
+          toggleMapLoader(false);
+        }
+      }
+    }
+
+    function hideStatus() {
+      statusEl.classList.add('hidden');
     }
 
     function showStatus(title, msg, type) {
       statusEl.classList.remove("hidden");
       statusTitle.textContent = title;
       statusMessage.textContent = msg;
-      statusEl.className = "mb-6 p-4 rounded-lg bg-gray-800 flex flex-col";
+      statusEl.className = "mb-6 p-4 rounded-lg bg-gray-800 flex flex-col space-y-2";
       const icon = statusEl.querySelector("i");
       if (type === "error") {
         icon.setAttribute("data-feather", "alert-circle");
@@ -281,7 +365,7 @@
     }
 
     // Initial
-    loadTracks();
+    loadTracks({ force: true });
     feather.replace();
   </script>
 </body>

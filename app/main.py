@@ -4,18 +4,21 @@ import io
 import os
 import re
 import time
+import json
 import hashlib
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Callable, Any
 from collections.abc import Iterable
+from threading import Lock
+from pathlib import Path
 
 import gpxpy
 import sqlalchemy
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.encoders import jsonable_encoder
 from geoalchemy2.shape import from_shape, to_shape
@@ -50,9 +53,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 logger = logging.getLogger("uvicorn.error")
+
+
+class TracksCache:
+    def __init__(self) -> None:
+        self._lock = Lock()
+        self._payload: dict[str, Any] | None = None
+        self._etag: str | None = None
+
+    def invalidate(self) -> None:
+        with self._lock:
+            self._payload = None
+            self._etag = None
+
+    def get_payload(
+        self, loader: Callable[[], tuple[dict[str, Any], str]]
+    ) -> tuple[dict[str, Any], str]:
+        with self._lock:
+            if self._payload is not None and self._etag is not None:
+                return self._payload, self._etag
+
+        payload, etag = loader()
+
+        with self._lock:
+            self._payload = payload
+            self._etag = etag
+
+        return payload, etag
+
+
+tracks_cache = TracksCache()
 
 # ------------------------------------------------------------------------------
 # Startup
@@ -246,7 +281,7 @@ def health():
 
 @app.get("/", response_class=HTMLResponse)
 def index():
-    return FileResponse("static/index.html")
+    return FileResponse(STATIC_DIR / "index.html")
 
 @app.post("/upload")
 async def upload_gpx(files: list[UploadFile] = File(...)):
@@ -274,13 +309,14 @@ async def upload_gpx(files: list[UploadFile] = File(...)):
             db.rollback()
             logger.exception("❌ DB commit failed")
             raise HTTPException(status_code=500, detail=f"DB commit failed: {commit_err}")
+        else:
+            if any(outcome.status == "ok" for outcome in outcomes):
+                tracks_cache.invalidate()
 
     return {"results": [outcome.as_dict() for outcome in outcomes]}
 
-@app.get("/tracks")
-def get_tracks():
-    """Return all tracks as a GeoJSON FeatureCollection."""
-    features: list[dict] = []
+def _build_tracks_payload() -> tuple[dict[str, Any], str]:
+    features: list[dict[str, Any]] = []
     with SessionLocal() as db:
         for track in db.execute(select(Track)).scalars():
             try:
@@ -301,7 +337,28 @@ def get_tracks():
                     "geometry": mapping(geometry),
                 }
             )
-    return JSONResponse(jsonable_encoder({"type": "FeatureCollection", "features": features}))
+
+    payload = {"type": "FeatureCollection", "features": features}
+    encoded = jsonable_encoder(payload)
+    etag = compute_sha256(
+        json.dumps(encoded, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    )
+    return encoded, etag
+
+
+@app.get("/tracks")
+def get_tracks(request: Request):
+    """Return all tracks as a GeoJSON FeatureCollection."""
+
+    payload, etag = tracks_cache.get_payload(_build_tracks_payload)
+
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"})
+
+    response = JSONResponse(payload)
+    response.headers["ETag"] = etag
+    response.headers["Cache-Control"] = "no-cache"
+    return response
 
 @app.delete("/delete_all")
 def delete_all_tracks():
@@ -310,4 +367,5 @@ def delete_all_tracks():
         rowcount = result.rowcount
         deleted_count = rowcount if rowcount is not None and rowcount >= 0 else 0
         db.commit()
+    tracks_cache.invalidate()
     return {"status": "ok", "deleted": deleted_count}

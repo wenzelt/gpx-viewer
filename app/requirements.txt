@@ -6,3 +6,4 @@ geoalchemy2==0.15.2
 shapely==2.0.6
 gpxpy==1.6.2
 python-multipart==0.0.9
+pytest==8.3.3
