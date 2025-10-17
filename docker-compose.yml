@@ -34,7 +34,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "8008:8000"
     volumes:
       - uploads:/app/uploads
     # Security hardening (optional, remove if it breaks local dev)
