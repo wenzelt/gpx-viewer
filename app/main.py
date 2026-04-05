@@ -140,6 +140,41 @@ def bytes_exceeds_limit(b: bytes, limit_bytes: int = MAX_UPLOAD_BYTES) -> bool:
     return len(b) > limit_bytes
 
 
+def _downsample_points(points: list, interval_seconds: int = 10) -> list:
+    """Return a subset of points sampled at most every *interval_seconds*.
+
+    When points carry timestamps, keeps a point only when at least
+    *interval_seconds* have elapsed since the last kept point (always keeps
+    the first and last point so the track shape is preserved).
+
+    Falls back to every-Nth index sampling when timestamps are absent.
+    """
+    if not points:
+        return points
+
+    has_time = getattr(points[0], "time", None) is not None
+
+    if has_time:
+        kept: list = [points[0]]
+        last_time = points[0].time
+        for p in points[1:-1]:
+            if p.time is None:
+                continue
+            delta = (p.time - last_time).total_seconds()
+            if delta >= interval_seconds:
+                kept.append(p)
+                last_time = p.time
+        if len(points) > 1:
+            kept.append(points[-1])
+        return kept
+
+    # Fallback: keep every Nth point plus the last
+    kept = points[::interval_seconds]
+    if points[-1] is not kept[-1]:
+        kept = list(kept) + [points[-1]]
+    return kept
+
+
 def _coords_from_points(points: Iterable) -> list[tuple[float, float]]:
     # Filters out points without both lon/lat, keeps only 2D
     out: list[tuple[float, float]] = []
@@ -152,19 +187,21 @@ def _coords_from_points(points: Iterable) -> list[tuple[float, float]]:
     return out
 
 
-def _lines_from_gpx(gpx: gpxpy.gpx.GPX) -> list[LineString]:
+def _lines_from_gpx(gpx: gpxpy.gpx.GPX, downsample_interval: int = 10) -> list[LineString]:
     lines: list[LineString] = []
 
     # Tracks → segments
     for trk in gpx.tracks:
         for seg in trk.segments:
-            coords = _coords_from_points(seg.points)
+            pts = _downsample_points(seg.points, downsample_interval)
+            coords = _coords_from_points(pts)
             if len(coords) >= 2:
                 lines.append(LineString(coords))
 
     # Routes
     for rte in gpx.routes:
-        coords = _coords_from_points(rte.points)
+        pts = _downsample_points(rte.points, downsample_interval)
+        coords = _coords_from_points(pts)
         if len(coords) >= 2:
             lines.append(LineString(coords))
 

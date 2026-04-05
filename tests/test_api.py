@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+from datetime import datetime, timezone, timedelta
 from types import SimpleNamespace
 from typing import List
 
@@ -9,7 +10,7 @@ from fastapi import UploadFile
 from starlette.requests import Request
 
 import main
-from main import UploadOutcome, delete_all_tracks, get_tracks, health, upload_gpx
+from main import UploadOutcome, _downsample_points, delete_all_tracks, get_tracks, health, upload_gpx
 
 
 class DummySession:
@@ -42,6 +43,68 @@ class DummySession:
 def _upload_file(name: str) -> UploadFile:
     return UploadFile(filename=name, file=io.BytesIO(b"<gpx></gpx>"))
 
+
+def _make_point(lon: float, lat: float, time: datetime | None = None):
+    """Minimal stand-in for a gpxpy TrackPoint."""
+    return SimpleNamespace(longitude=lon, latitude=lat, time=time)
+
+
+def _ts(seconds_offset: int) -> datetime:
+    base = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    return base + timedelta(seconds=seconds_offset)
+
+
+# ── _downsample_points ────────────────────────────────────────────────────────
+
+def test_downsample_empty_list_returns_empty():
+    assert _downsample_points([]) == []
+
+
+def test_downsample_single_point_returned_unchanged():
+    pt = _make_point(0, 0, _ts(0))
+    assert _downsample_points([pt]) == [pt]
+
+
+def test_downsample_time_based_keeps_first_last_and_interval():
+    # 25 points at 1-second intervals → with interval=10 should keep 0,10,20,24
+    pts = [_make_point(float(i), 0.0, _ts(i)) for i in range(25)]
+    result = _downsample_points(pts, interval_seconds=10)
+    kept_times = [p.time for p in result]
+    assert kept_times[0] == _ts(0)
+    assert kept_times[-1] == _ts(24)
+    # point at t=10 and t=20 should be included
+    assert _ts(10) in kept_times
+    assert _ts(20) in kept_times
+    # total points should be much fewer than 25
+    assert len(result) <= 5
+
+
+def test_downsample_time_based_no_skipped_if_already_sparse():
+    # Points already 15s apart — all should be kept
+    pts = [_make_point(float(i), 0.0, _ts(i * 15)) for i in range(5)]
+    result = _downsample_points(pts, interval_seconds=10)
+    assert result == pts
+
+
+def test_downsample_fallback_index_based_when_no_timestamps():
+    pts = [_make_point(float(i), 0.0, None) for i in range(25)]
+    result = _downsample_points(pts, interval_seconds=10)
+    # Should include index 0, 10, 20, and last (24)
+    assert pts[0] in result
+    assert pts[10] in result
+    assert pts[20] in result
+    assert pts[24] in result
+    assert len(result) <= 5
+
+
+def test_downsample_preserves_two_point_track():
+    pts = [_make_point(0, 0, _ts(0)), _make_point(1, 1, _ts(1))]
+    result = _downsample_points(pts, interval_seconds=10)
+    assert result[0] is pts[0]
+    assert result[-1] is pts[-1]
+
+
+# ── existing API tests ────────────────────────────────────────────────────────
 
 def test_health_endpoint_reports_status() -> None:
     payload = health()
