@@ -86,7 +86,7 @@ gpx-viewer/
 ├─ .env                      # Database credentials
 ├─ app/
 │  ├─ Dockerfile             # FastAPI app container
-│  ├─ requirements.txt       # Python dependencies
+│  ├─ pyproject.toml         # Python dependencies (uv)
 │  ├─ main.py                # FastAPI endpoints
 │  ├─ models.py              # SQLAlchemy ORM models
 │  ├─ db.py                  # Database setup & session
