@@ -5,10 +5,13 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Separate layer for deps
-COPY requirements.txt .
+# Install uv package manager
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
- && pip install --no-cache-dir -r requirements.txt
+ && pip install --no-cache-dir uv
+
+# Separate layer for deps
+COPY pyproject.toml .
+RUN uv sync --no-dev --no-install-project
 
 # App code
 COPY . .
@@ -24,4 +27,4 @@ USER appuser
 EXPOSE 8000
 
 # Uvicorn in-process is fine for this small app
-CMD ["sh", "-c", "uvicorn main:app --host ${UVICORN_HOST:-0.0.0.0} --port ${UVICORN_PORT:-8000}"]
+CMD ["sh", "-c", "uv run uvicorn main:app --host ${UVICORN_HOST:-0.0.0.0} --port ${UVICORN_PORT:-8000}"]
