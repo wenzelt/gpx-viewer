@@ -16,7 +16,7 @@ from pathlib import Path
 
 import gpxpy
 import sqlalchemy
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -37,6 +37,10 @@ from models import Track
 MAX_UPLOAD_MB: int = int(os.environ.get("MAX_UPLOAD_MB", "50"))
 MAX_UPLOAD_BYTES: int = MAX_UPLOAD_MB * 1024 * 1024
 ALLOWED_ORIGINS: list[str] = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
+CORS_ALLOW_CREDENTIALS: bool = os.environ.get(
+    "ALLOW_CREDENTIALS", "false"
+).strip().lower() in {"1", "true", "yes", "on"}
+TRACKS_PAGE_MAX: int = int(os.environ.get("TRACKS_PAGE_MAX", "1000"))
 APP_TITLE = "Local GPX Viewer"
 APP_VERSION = "1.1"
 
@@ -45,10 +49,19 @@ APP_VERSION = "1.1"
 # ------------------------------------------------------------------------------
 app = FastAPI(title=APP_TITLE, version=APP_VERSION)
 
+logger = logging.getLogger("uvicorn.error")
+
+if CORS_ALLOW_CREDENTIALS and ALLOWED_ORIGINS == ["*"]:
+    logger.warning(
+        "ALLOW_CREDENTIALS is true with wildcard ALLOWED_ORIGINS; "
+        "forcing allow_credentials=False for safe/valid CORS behavior."
+    )
+    CORS_ALLOW_CREDENTIALS = False
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS != ["*"] else ["*"],
-    allow_credentials=True,
+    allow_credentials=CORS_ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -56,8 +69,6 @@ app.add_middleware(
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
-logger = logging.getLogger("uvicorn.error")
 
 
 class TracksCache:
@@ -77,17 +88,16 @@ class TracksCache:
         with self._lock:
             if self._payload is not None and self._etag is not None:
                 return self._payload, self._etag
-
-        payload, etag = loader()
-
-        with self._lock:
+            # Keep computation under lock to prevent concurrent cache misses
+            # from recomputing the same expensive payload.
+            payload, etag = loader()
             self._payload = payload
             self._etag = etag
-
-        return payload, etag
+            return payload, etag
 
 
 tracks_cache = TracksCache()
+
 
 # ------------------------------------------------------------------------------
 # Startup
@@ -96,6 +106,7 @@ tracks_cache = TracksCache()
 def _startup() -> None:
     init_db_with_retry()
 
+
 def init_db_with_retry(max_retries: int = 10, delay: int = 3) -> None:
     for attempt in range(1, max_retries + 1):
         try:
@@ -103,24 +114,31 @@ def init_db_with_retry(max_retries: int = 10, delay: int = 3) -> None:
             logger.info("✅ Database initialized")
             return
         except sqlalchemy.exc.OperationalError:
-            logger.warning("⚠️ DB not ready (attempt %s/%s), retrying...", attempt, max_retries)
+            logger.warning(
+                "⚠️ DB not ready (attempt %s/%s), retrying...", attempt, max_retries
+            )
             time.sleep(delay)
     raise RuntimeError("Database not ready after retries")
+
 
 # ------------------------------------------------------------------------------
 # Helpers (pure & testable)
 # ------------------------------------------------------------------------------
 _FILENAME_TAG_RE = re.compile(r".*-(\w+)\.gpx$", re.IGNORECASE)
 
+
 def extract_tag(filename: str) -> str | None:
     m = _FILENAME_TAG_RE.match(filename)
     return m.group(1).lower() if m else None
 
+
 def compute_sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
+
 def bytes_exceeds_limit(b: bytes, limit_bytes: int = MAX_UPLOAD_BYTES) -> bool:
     return len(b) > limit_bytes
+
 
 def _coords_from_points(points: Iterable) -> list[tuple[float, float]]:
     # Filters out points without both lon/lat, keeps only 2D
@@ -132,6 +150,7 @@ def _coords_from_points(points: Iterable) -> list[tuple[float, float]]:
             continue
         out.append((float(lon), float(lat)))
     return out
+
 
 def _lines_from_gpx(gpx: gpxpy.gpx.GPX) -> list[LineString]:
     lines: list[LineString] = []
@@ -151,6 +170,7 @@ def _lines_from_gpx(gpx: gpxpy.gpx.GPX) -> list[LineString]:
 
     return lines
 
+
 def _merge_to_multilinestring(lines: list[LineString]) -> MultiLineString:
     """
     Merge lines and return a MultiLineString. Always returns MultiLineString.
@@ -168,11 +188,13 @@ def _merge_to_multilinestring(lines: list[LineString]) -> MultiLineString:
     # Fallback: wrap original lines
     return MultiLineString([list(ls.coords) for ls in lines])
 
+
 def _track_name(gpx: gpxpy.gpx.GPX) -> str | None:
     try:
         return gpx.tracks[0].name or None
-    except Exception:
+    except (IndexError, AttributeError):
         return None
+
 
 def _is_duplicate_hash(db: Session, file_hash: str) -> bool:
     stmt = select(exists().where(Track.hash == file_hash))
@@ -272,19 +294,24 @@ async def _process_upload_file(
     logger.info("%s saved successfully ✅", filename)
     return UploadOutcome(filename, "ok")
 
+
 # ------------------------------------------------------------------------------
 # Routes
 # ------------------------------------------------------------------------------
 @app.get("/health")
-def health():
+def health() -> dict[str, str]:
     return {"status": "ok", "time_utc": datetime.utcnow().isoformat()}
 
+
 @app.get("/", response_class=HTMLResponse)
-def index():
+def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
+
 @app.post("/upload")
-async def upload_gpx(files: list[UploadFile] = File(...)):
+async def upload_gpx(
+    files: list[UploadFile] = File(...),
+) -> dict[str, list[dict[str, str]]]:
     """Upload one or more GPX files and store them in PostGIS."""
 
     outcomes: list[UploadOutcome] = []
@@ -308,31 +335,60 @@ async def upload_gpx(files: list[UploadFile] = File(...)):
         except Exception as commit_err:
             db.rollback()
             logger.exception("❌ DB commit failed")
-            raise HTTPException(status_code=500, detail=f"DB commit failed: {commit_err}")
+            raise HTTPException(
+                status_code=500, detail=f"DB commit failed: {commit_err}"
+            )
         else:
             if any(outcome.status == "ok" for outcome in outcomes):
                 tracks_cache.invalidate()
 
     return {"results": [outcome.as_dict() for outcome in outcomes]}
 
-def _build_tracks_payload() -> tuple[dict[str, Any], str]:
+
+def _build_tracks_payload(
+    limit: int | None = None, offset: int = 0
+) -> tuple[dict[str, Any], str]:
     features: list[dict[str, Any]] = []
+    stmt = (
+        select(
+            Track.id,
+            Track.name,
+            Track.filename,
+            Track.tag,
+            Track.created_at,
+            Track.geom,
+        )
+        .order_by(Track.id)
+        .offset(offset)
+    )
+    if limit is not None:
+        stmt = stmt.limit(limit)
+
     with SessionLocal() as db:
-        for track in db.execute(select(Track)).scalars():
+        for (
+            track_id,
+            track_name,
+            track_filename,
+            track_tag,
+            track_created_at,
+            track_geom,
+        ) in db.execute(stmt):
             try:
-                geometry = _ensure_multilinestring(to_shape(track.geom))
+                geometry = _ensure_multilinestring(to_shape(track_geom))
             except ValueError as err:
-                logger.warning("Skipping track %s: %s", track.id, err)
+                logger.warning("Skipping track %s: %s", track_id, err)
                 continue
 
             features.append(
                 {
                     "type": "Feature",
                     "properties": {
-                        "id": track.id,
-                        "name": track.name or track.filename or f"Track {track.id}",
-                        "tag": track.tag,
-                        "created_at": (track.created_at.isoformat() + "Z") if track.created_at else None,
+                        "id": track_id,
+                        "name": track_name or track_filename or f"Track {track_id}",
+                        "tag": track_tag,
+                        "created_at": (track_created_at.isoformat() + "Z")
+                        if track_created_at
+                        else None,
                     },
                     "geometry": mapping(geometry),
                 }
@@ -347,21 +403,32 @@ def _build_tracks_payload() -> tuple[dict[str, Any], str]:
 
 
 @app.get("/tracks")
-def get_tracks(request: Request):
+def get_tracks(
+    request: Request,
+    limit: int | None = Query(default=None, ge=1, le=TRACKS_PAGE_MAX),
+    offset: int = Query(default=0, ge=0),
+) -> Response:
     """Return all tracks as a GeoJSON FeatureCollection."""
 
-    payload, etag = tracks_cache.get_payload(_build_tracks_payload)
+    is_default_query = limit is None and offset == 0
+    if is_default_query:
+        payload, etag = tracks_cache.get_payload(_build_tracks_payload)
+    else:
+        payload, etag = _build_tracks_payload(limit=limit, offset=offset)
 
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"})
+        return Response(
+            status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"}
+        )
 
     response = JSONResponse(payload)
     response.headers["ETag"] = etag
     response.headers["Cache-Control"] = "no-cache"
     return response
 
+
 @app.delete("/delete_all")
-def delete_all_tracks():
+def delete_all_tracks() -> dict[str, int | str]:
     with SessionLocal() as db:
         result = db.execute(delete(Track))
         rowcount = result.rowcount
