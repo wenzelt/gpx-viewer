@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import io
-from datetime import datetime, timezone, timedelta
 from types import SimpleNamespace
 from typing import List
 
@@ -44,14 +43,9 @@ def _upload_file(name: str) -> UploadFile:
     return UploadFile(filename=name, file=io.BytesIO(b"<gpx></gpx>"))
 
 
-def _make_point(lon: float, lat: float, time: datetime | None = None):
+def _make_point(lon: float, lat: float):
     """Minimal stand-in for a gpxpy TrackPoint."""
-    return SimpleNamespace(longitude=lon, latitude=lat, time=time)
-
-
-def _ts(seconds_offset: int) -> datetime:
-    base = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    return base + timedelta(seconds=seconds_offset)
+    return SimpleNamespace(longitude=lon, latitude=lat)
 
 
 # ── _downsample_points ────────────────────────────────────────────────────────
@@ -61,47 +55,51 @@ def test_downsample_empty_list_returns_empty():
 
 
 def test_downsample_single_point_returned_unchanged():
-    pt = _make_point(0, 0, _ts(0))
+    pt = _make_point(0, 0)
     assert _downsample_points([pt]) == [pt]
 
 
-def test_downsample_time_based_keeps_first_last_and_interval():
-    # 25 points at 1-second intervals → with interval=10 should keep 0,10,20,24
-    pts = [_make_point(float(i), 0.0, _ts(i)) for i in range(25)]
-    result = _downsample_points(pts, interval_seconds=10)
-    kept_times = [p.time for p in result]
-    assert kept_times[0] == _ts(0)
-    assert kept_times[-1] == _ts(24)
-    # point at t=10 and t=20 should be included
-    assert _ts(10) in kept_times
-    assert _ts(20) in kept_times
-    # total points should be much fewer than 25
-    assert len(result) <= 5
+def test_downsample_keeps_ten_percent_deterministically():
+    pts = [_make_point(float(i), 0.0) for i in range(100)]
+    result = _downsample_points(pts, sample_percent=10)
+    assert result == [
+        pts[0],
+        pts[1],
+        pts[13],
+        pts[25],
+        pts[37],
+        pts[50],
+        pts[62],
+        pts[74],
+        pts[86],
+        pts[99],
+    ]
 
 
-def test_downsample_time_based_no_skipped_if_already_sparse():
-    # Points already 15s apart — all should be kept
-    pts = [_make_point(float(i), 0.0, _ts(i * 15)) for i in range(5)]
-    result = _downsample_points(pts, interval_seconds=10)
-    assert result == pts
+def test_downsample_preserves_endpoints():
+    pts = [_make_point(float(i), 0.0) for i in range(25)]
+    result = _downsample_points(pts, sample_percent=10)
+    assert result[0] is pts[0]
+    assert result[-1] is pts[-1]
 
 
-def test_downsample_fallback_index_based_when_no_timestamps():
-    pts = [_make_point(float(i), 0.0, None) for i in range(25)]
-    result = _downsample_points(pts, interval_seconds=10)
-    # Should include index 0, 10, 20, and last (24)
-    assert pts[0] in result
-    assert pts[10] in result
-    assert pts[20] in result
-    assert pts[24] in result
-    assert len(result) <= 5
+def test_downsample_small_track_returns_endpoints_when_ten_percent_is_too_small():
+    pts = [_make_point(float(i), 0.0) for i in range(5)]
+    result = _downsample_points(pts, sample_percent=10)
+    assert result == [pts[0], pts[-1]]
 
 
 def test_downsample_preserves_two_point_track():
-    pts = [_make_point(0, 0, _ts(0)), _make_point(1, 1, _ts(1))]
-    result = _downsample_points(pts, interval_seconds=10)
+    pts = [_make_point(0, 0), _make_point(1, 1)]
+    result = _downsample_points(pts, sample_percent=10)
     assert result[0] is pts[0]
     assert result[-1] is pts[-1]
+
+
+def test_downsample_clamps_sampling_percent():
+    pts = [_make_point(float(i), 0.0) for i in range(20)]
+    assert _downsample_points(pts, sample_percent=0) == [pts[0], pts[-1]]
+    assert _downsample_points(pts, sample_percent=200) == pts
 
 
 # ── existing API tests ────────────────────────────────────────────────────────
