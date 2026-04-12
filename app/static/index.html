@@ -173,32 +173,43 @@
     const statElevation = document.getElementById('statElevation');
 
     function updateStats(geojson) {
-      let totalDistanceM = 0;
-      let totalElevationGainM = 0;
-      let hasData = false;
+      const features = geojson.features || [];
 
-      for (const feature of geojson.features || []) {
-        const props = feature.properties || {};
-        if (props.total_distance_m != null) {
-          totalDistanceM += props.total_distance_m;
-          hasData = true;
-        }
-        if (props.total_elevation_gain_m != null) {
-          totalElevationGainM += props.total_elevation_gain_m;
-        }
-      }
-
-      if (!hasData) {
+      if (features.length === 0) {
         statsBar.classList.add('hidden');
         return;
       }
 
-      const distKm = totalDistanceM / 1000;
-      statDistance.textContent = distKm >= 1
-        ? distKm.toFixed(1) + ' km'
-        : Math.round(totalDistanceM) + ' m';
+      let totalDistanceM = 0;
+      let totalElevationGainM = 0;
+      let hasDistance = false;
+      let hasElevation = false;
 
-      statElevation.textContent = Math.round(totalElevationGainM) + ' m';
+      for (const feature of features) {
+        const props = feature.properties || {};
+        if (props.total_distance_m != null) {
+          totalDistanceM += props.total_distance_m;
+          hasDistance = true;
+        }
+        if (props.total_elevation_gain_m != null) {
+          totalElevationGainM += props.total_elevation_gain_m;
+          hasElevation = true;
+        }
+      }
+
+      if (hasDistance) {
+        const distKm = totalDistanceM / 1000;
+        statDistance.textContent = distKm >= 1
+          ? distKm.toFixed(1) + ' km'
+          : Math.round(totalDistanceM) + ' m';
+      } else {
+        statDistance.textContent = '—';
+      }
+
+      statElevation.textContent = hasElevation
+        ? Math.round(totalElevationGainM) + ' m'
+        : '—';
+
       statsBar.classList.remove('hidden');
       feather.replace();
     }
@@ -421,8 +432,10 @@
       feather.replace();
     }
 
-    // Initial
-    loadTracks({ force: true });
+    // Initial: backfill stats for any pre-existing tracks, then load
+    fetch('/backfill_stats', { method: 'POST' })
+      .catch(() => {}) // best-effort; never blocks the map
+      .finally(() => loadTracks({ force: true }));
     feather.replace();
   </script>
 </body>

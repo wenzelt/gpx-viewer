@@ -476,6 +476,48 @@ def get_tracks(
     return response
 
 
+@app.post("/backfill_stats")
+def backfill_stats() -> dict[str, int]:
+    """Recompute distance and elevation for tracks that have NULL stats.
+
+    Safe to call multiple times — only processes tracks where at least one
+    stat column is NULL.
+    """
+    from sqlalchemy import or_, is_
+
+    updated = 0
+    stmt = select(Track).where(
+        or_(
+            Track.total_distance_m.is_(None),
+            Track.total_elevation_gain_m.is_(None),
+        )
+    )
+    with SessionLocal() as db:
+        tracks = db.execute(stmt).scalars().all()
+        for track in tracks:
+            try:
+                raw_geom = to_shape(track.geom)
+                mls = _ensure_multilinestring(raw_geom)
+                # Reconstruct a flat list of simple point-like objects from the geometry
+                coords = [
+                    type("P", (), {"latitude": lat, "longitude": lon, "elevation": None})()
+                    for geom in mls.geoms
+                    for lon, lat in geom.coords
+                ]
+                track.total_distance_m = calculate_track_distance_m(coords)
+                # Elevation data is not stored in geometry; set 0 rather than None
+                # so the stat is shown (actual gain requires original GPX points).
+                if track.total_elevation_gain_m is None:
+                    track.total_elevation_gain_m = 0.0
+                updated += 1
+            except Exception:
+                logger.exception("Could not backfill stats for track %s", track.id)
+        db.commit()
+    if updated:
+        tracks_cache.invalidate()
+    return {"updated": updated}
+
+
 @app.delete("/delete_all")
 def delete_all_tracks() -> dict[str, int | str]:
     with SessionLocal() as db:
