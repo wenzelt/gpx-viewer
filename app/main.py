@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 
 from db import SessionLocal, init_db
 from models import Track
+from track_stats import calculate_track_distance_m, calculate_elevation_gain_m
 
 # ------------------------------------------------------------------------------
 # Settings
@@ -313,6 +314,9 @@ async def _process_upload_file(
         logger.warning("%s has no valid track points", filename)
         return UploadOutcome(filename, "skipped", "No valid track points")
 
+    all_points = [p for trk in gpx.tracks for seg in trk.segments for p in seg.points]
+    all_points += [p for rte in gpx.routes for p in rte.points]
+
     try:
         mls = _merge_to_multilinestring(lines)
         track = Track(
@@ -321,6 +325,8 @@ async def _process_upload_file(
             tag=extract_tag(filename),
             hash=file_hash,
             geom=from_shape(mls, srid=4326),
+            total_distance_m=calculate_track_distance_m(all_points),
+            total_elevation_gain_m=calculate_elevation_gain_m(all_points),
         )
         db.add(track)
     except Exception:
@@ -394,6 +400,8 @@ def _build_tracks_payload(
             Track.tag,
             Track.created_at,
             Track.geom,
+            Track.total_distance_m,
+            Track.total_elevation_gain_m,
         )
         .order_by(Track.id)
         .offset(offset)
@@ -409,6 +417,8 @@ def _build_tracks_payload(
             track_tag,
             track_created_at,
             track_geom,
+            track_distance_m,
+            track_elevation_gain_m,
         ) in db.execute(stmt):
             try:
                 geometry = _ensure_multilinestring(to_shape(track_geom))
@@ -426,6 +436,8 @@ def _build_tracks_payload(
                         "created_at": (track_created_at.isoformat() + "Z")
                         if track_created_at
                         else None,
+                        "total_distance_m": track_distance_m,
+                        "total_elevation_gain_m": track_elevation_gain_m,
                     },
                     "geometry": mapping(geometry),
                 }

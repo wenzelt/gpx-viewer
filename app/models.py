@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Integer, String, DateTime, UniqueConstraint
+from sqlalchemy import Float, Integer, String, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, declarative_base
 
 Base = declarative_base()
@@ -19,6 +19,8 @@ class Track(Base):
     hash: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    total_distance_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_elevation_gain_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     # GeoAlchemy Geometry column; typing as Any to keep mypy happy
     geom: Mapped[Any] = mapped_column(
         Geometry(geometry_type="MULTILINESTRING", srid=4326, spatial_index=True)

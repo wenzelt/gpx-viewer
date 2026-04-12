@@ -26,9 +26,37 @@ engine = create_engine(DB_DSN, **engine_kwargs)
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
+def _migrate_add_stats_columns(eng=None) -> None:
+    """Add total_distance_m and total_elevation_gain_m to an existing tracks table.
+
+    create_all() only creates missing tables; it does not alter existing ones.
+    This migration is safe to call repeatedly (idempotent).
+    """
+    target = eng if eng is not None else engine
+    with target.begin() as conn:
+        if conn.dialect.name == "postgresql":
+            conn.execute(
+                text("ALTER TABLE tracks ADD COLUMN IF NOT EXISTS total_distance_m FLOAT")
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE tracks ADD COLUMN IF NOT EXISTS total_elevation_gain_m FLOAT"
+                )
+            )
+        elif conn.dialect.name == "sqlite":
+            existing = {row[1] for row in conn.execute(text("PRAGMA table_info(tracks)"))}
+            if "total_distance_m" not in existing:
+                conn.execute(text("ALTER TABLE tracks ADD COLUMN total_distance_m FLOAT"))
+            if "total_elevation_gain_m" not in existing:
+                conn.execute(
+                    text("ALTER TABLE tracks ADD COLUMN total_elevation_gain_m FLOAT")
+                )
+
+
 def init_db() -> None:
     # Ensure PostGIS extension exists when running against PostgreSQL
     with engine.begin() as conn:
         if conn.dialect.name == "postgresql":
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
     Base.metadata.create_all(bind=engine)
+    _migrate_add_stats_columns()

@@ -76,6 +76,24 @@
           <p id="mapLoaderMessage" class="text-sm tracking-wide uppercase">Loading tracks…</p>
         </div>
       </div>
+
+      <!-- Stats -->
+      <div id="statsBar" class="hidden mt-4 grid grid-cols-2 gap-4">
+        <div class="bg-gray-800 rounded-xl p-4 flex items-center space-x-3">
+          <i data-feather="map-pin" class="text-green-400 w-6 h-6 flex-shrink-0"></i>
+          <div>
+            <p class="text-xs text-gray-400 uppercase tracking-wide">Total Distance</p>
+            <p id="statDistance" class="text-lg font-bold text-gray-100">—</p>
+          </div>
+        </div>
+        <div class="bg-gray-800 rounded-xl p-4 flex items-center space-x-3">
+          <i data-feather="trending-up" class="text-green-400 w-6 h-6 flex-shrink-0"></i>
+          <div>
+            <p class="text-xs text-gray-400 uppercase tracking-wide">Total Elevation Gain</p>
+            <p id="statElevation" class="text-lg font-bold text-gray-100">—</p>
+          </div>
+        </div>
+      </div>
     </main>
 
     <footer class="py-6 mt-8 text-center text-gray-500 text-sm">
@@ -149,6 +167,42 @@
       })
     }).addTo(map);
 
+    // Stats DOM refs
+    const statsBar = document.getElementById('statsBar');
+    const statDistance = document.getElementById('statDistance');
+    const statElevation = document.getElementById('statElevation');
+
+    function updateStats(geojson) {
+      let totalDistanceM = 0;
+      let totalElevationGainM = 0;
+      let hasData = false;
+
+      for (const feature of geojson.features || []) {
+        const props = feature.properties || {};
+        if (props.total_distance_m != null) {
+          totalDistanceM += props.total_distance_m;
+          hasData = true;
+        }
+        if (props.total_elevation_gain_m != null) {
+          totalElevationGainM += props.total_elevation_gain_m;
+        }
+      }
+
+      if (!hasData) {
+        statsBar.classList.add('hidden');
+        return;
+      }
+
+      const distKm = totalDistanceM / 1000;
+      statDistance.textContent = distKm >= 1
+        ? distKm.toFixed(1) + ' km'
+        : Math.round(totalDistanceM) + ' m';
+
+      statElevation.textContent = Math.round(totalElevationGainM) + ' m';
+      statsBar.classList.remove('hidden');
+      feather.replace();
+    }
+
     // DOM refs
     const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('fileInput');
@@ -185,6 +239,7 @@
         const res = await fetch("/delete_all", { method: "DELETE" });
         if (!res.ok) throw new Error(await res.text());
         layer.clearLayers();
+        statsBar.classList.add('hidden');
         currentTracksEtag = null;
         await loadTracks({ force: true });
       } catch (err) {
@@ -315,6 +370,7 @@
         currentTracksEtag = res.headers.get('ETag');
         layer.clearLayers();
         layer.addData(data);
+        updateStats(data);
         if (tracksRetryHandle) {
           clearTimeout(tracksRetryHandle);
           tracksRetryHandle = null;
