@@ -141,38 +141,38 @@ def bytes_exceeds_limit(b: bytes, limit_bytes: int = MAX_UPLOAD_BYTES) -> bool:
     return len(b) > limit_bytes
 
 
-def _downsample_points(points: list, interval_seconds: int = 10) -> list:
-    """Return a subset of points sampled at most every *interval_seconds*.
+def _downsample_points(points: list, sample_percent: int = 10) -> list:
+    """Return a deterministic subset of points for rendering.
 
-    When points carry timestamps, keeps a point only when at least
-    *interval_seconds* have elapsed since the last kept point (always keeps
-    the first and last point so the track shape is preserved).
-
-    Falls back to every-Nth index sampling when timestamps are absent.
+    Keeps roughly ``sample_percent`` of the original points, always preserving
+    the first and last point when at least two points are present.
     """
     if not points:
         return points
 
-    has_time = getattr(points[0], "time", None) is not None
+    if len(points) <= 2:
+        return points
 
-    if has_time:
-        kept: list = [points[0]]
-        last_time = points[0].time
-        for p in points[1:-1]:
-            if p.time is None:
-                continue
-            delta = (p.time - last_time).total_seconds()
-            if delta >= interval_seconds:
-                kept.append(p)
-                last_time = p.time
-        if len(points) > 1:
-            kept.append(points[-1])
-        return kept
+    sample_percent = max(1, min(sample_percent, 100))
 
-    # Fallback: keep every Nth point plus the last
-    kept = points[::interval_seconds]
-    if points[-1] is not kept[-1]:
-        kept = list(kept) + [points[-1]]
+    interior_points = points[1:-1]
+    interior_target = max(
+        0,
+        min(
+            len(interior_points),
+            round(len(points) * sample_percent / 100) - 2,
+        ),
+    )
+    if interior_target == 0:
+        return [points[0], points[-1]]
+
+    step = len(interior_points) / interior_target
+    kept = [points[0]]
+    kept.extend(
+        interior_points[min(len(interior_points) - 1, int(i * step))]
+        for i in range(interior_target)
+    )
+    kept.append(points[-1])
     return kept
 
 
@@ -188,20 +188,20 @@ def _coords_from_points(points: Iterable) -> list[tuple[float, float]]:
     return out
 
 
-def _lines_from_gpx(gpx: gpxpy.gpx.GPX, downsample_interval: int = 10) -> list[LineString]:
+def _lines_from_gpx(gpx: gpxpy.gpx.GPX, sample_percent: int = 10) -> list[LineString]:
     lines: list[LineString] = []
 
     # Tracks → segments
     for trk in gpx.tracks:
         for seg in trk.segments:
-            pts = _downsample_points(seg.points, downsample_interval)
+            pts = _downsample_points(seg.points, sample_percent)
             coords = _coords_from_points(pts)
             if len(coords) >= 2:
                 lines.append(LineString(coords))
 
     # Routes
     for rte in gpx.routes:
-        pts = _downsample_points(rte.points, downsample_interval)
+        pts = _downsample_points(rte.points, sample_percent)
         coords = _coords_from_points(pts)
         if len(coords) >= 2:
             lines.append(LineString(coords))
