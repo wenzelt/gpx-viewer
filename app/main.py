@@ -25,7 +25,7 @@ from geoalchemy2.shape import from_shape, to_shape
 from shapely.geometry import LineString, MultiLineString, mapping
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import linemerge
-from sqlalchemy import select, exists, delete
+from sqlalchemy import select, exists, delete, or_
 from sqlalchemy.orm import Session
 
 from db import SessionLocal, init_db
@@ -483,8 +483,6 @@ def backfill_stats() -> dict[str, int]:
     Safe to call multiple times — only processes tracks where at least one
     stat column is NULL.
     """
-    from sqlalchemy import or_, is_
-
     updated = 0
     stmt = select(Track).where(
         or_(
