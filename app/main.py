@@ -25,7 +25,7 @@ from geoalchemy2.shape import from_shape, to_shape
 from shapely.geometry import LineString, MultiLineString, mapping
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import linemerge
-from sqlalchemy import select, exists, delete, or_
+from sqlalchemy import select, exists, delete, or_, update as sa_update
 from sqlalchemy.orm import Session
 
 from db import SessionLocal, init_db
@@ -478,35 +478,38 @@ def get_tracks(
 
 @app.post("/backfill_stats")
 def backfill_stats() -> dict[str, int]:
-    """Recompute distance and elevation for tracks that have NULL stats.
+    """Recompute distance for tracks that have NULL distance.
 
-    Safe to call multiple times — only processes tracks where at least one
-    stat column is NULL.
+    Elevation cannot be recovered from the stored 2D geometry — it is only
+    available during the original upload.  Tracks without elevation data will
+    show '—' in the UI; re-uploading the GPX file will populate it properly.
+
+    Also clears any previously-set 0.0 elevation placeholders back to NULL so
+    the UI shows an honest '—' instead of a misleading '0 m'.
     """
     updated = 0
-    stmt = select(Track).where(
-        or_(
-            Track.total_distance_m.is_(None),
-            Track.total_elevation_gain_m.is_(None),
-        )
-    )
+    stmt = select(Track).where(Track.total_distance_m.is_(None))
     with SessionLocal() as db:
+        # Reset any false 0.0 elevations written by an earlier buggy backfill
+        db.execute(
+            sa_update(Track)
+            .where(Track.total_elevation_gain_m == 0.0)
+            .values(total_elevation_gain_m=None)
+        )
+
         tracks = db.execute(stmt).scalars().all()
         for track in tracks:
             try:
                 raw_geom = to_shape(track.geom)
                 mls = _ensure_multilinestring(raw_geom)
-                # Reconstruct a flat list of simple point-like objects from the geometry
                 coords = [
                     type("P", (), {"latitude": lat, "longitude": lon, "elevation": None})()
                     for geom in mls.geoms
                     for lon, lat in geom.coords
                 ]
                 track.total_distance_m = calculate_track_distance_m(coords)
-                # Elevation data is not stored in geometry; set 0 rather than None
-                # so the stat is shown (actual gain requires original GPX points).
-                if track.total_elevation_gain_m is None:
-                    track.total_elevation_gain_m = 0.0
+                # total_elevation_gain_m intentionally left as NULL — elevation
+                # is not stored in the geometry and cannot be recomputed here.
                 updated += 1
             except Exception:
                 logger.exception("Could not backfill stats for track %s", track.id)
