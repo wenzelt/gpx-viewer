@@ -3,30 +3,73 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>TrailBlaze GPX Viewer</title>
+  <title>TrailBlaze — GPX Viewer</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/feather-icons"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
   <style>
-    #map { height: calc(100vh - 200px); z-index: 1; }
-    #mapLoader {
-      backdrop-filter: blur(2px);
+    /* ── Trail-theme overrides (harmonise with landing page) ── */
+    body {
+      font-family: 'Satoshi', 'Space Grotesk', 'Inter', sans-serif !important;
+      background-color: #0a0d0a !important;
+      color: #e8ede8 !important;
     }
+    h1, h2, h3 { font-family: 'Space Grotesk', 'Helvetica Neue', sans-serif !important; }
+
+    /* Surface colours */
+    .bg-gray-900 { background-color: #0a0d0a !important; }
+    .bg-gray-800 { background-color: #141a14 !important; }
+
+    /* Text colours */
+    .text-gray-200 { color: #e8ede8 !important; }
+    .text-gray-400 { color: #8a9e8a !important; }
+    .text-gray-100 { color: #e8ede8 !important; }
+    .text-gray-500 { color: #4a5e4a !important; }
+
+    /* Primary green */
+    .text-green-400  { color: #5db87a !important; }
+    .bg-green-600    { background-color: #2d7a4a !important; }
+    .hover\:bg-green-500:hover { background-color: #3d8856 !important; }
+
+    /* Delete button */
+    .bg-red-700      { background-color: #7a2323 !important; }
+    .hover\:bg-red-600:hover { background-color: #963030 !important; }
+
+    /* Borders */
+    .border-gray-700              { border-color: #374437 !important; }
+    .hover\:border-gray-600:hover { border-color: #4a5e4a !important; }
+
+    /* Map spinner */
+    .border-green-400 { border-color: #5db87a !important; }
+
+    /* Status icon colours */
+    .text-blue-500  { color: #5b9bd5 !important; }
+    .text-red-400   { color: #e06060 !important; }
+
+    /* Dropzone drag-over state */
+    .dropzone-active { background-color: #141a14; border-color: #4a5e4a; }
+
+    /* Progress bar */
+    #map { height: calc(100vh - 200px); z-index: 1; }
+    #mapLoader { backdrop-filter: blur(2px); }
     .dropzone { transition: all 0.3s ease; }
-    .dropzone-active { background-color: #2d3748; border-color: #4a5568; }
     .progress-container { margin-top: 6px; }
     .progress-bar {
       height: 6px;
       border-radius: 3px;
-      background: #2d3748;
+      background: #1a221a;
       overflow: hidden;
     }
     .progress-bar-inner {
       height: 100%;
       width: 0%;
-      background: #48bb78;
+      background: #5db87a;
       transition: width 0.2s ease;
     }
   </style>
@@ -307,29 +350,29 @@
               const data = JSON.parse(xhr.responseText);
               const r = data.results[0];
               if (r.status === "ok") {
-                bar.style.background = "#48bb78";
+                bar.style.background = "#5db87a";
                 statusText.textContent = "Uploaded ✓";
               } else if (r.status === "skipped") {
-                bar.style.background = "#ecc94b";
+                bar.style.background = "#e8a543";
                 statusText.textContent = `Skipped (${r.reason})`;
               } else {
-                bar.style.background = "#f56565";
+                bar.style.background = "#e06060";
                 statusText.textContent = `Failed (${r.reason})`;
               }
             } catch {
-              bar.style.background = "#f56565";
+              bar.style.background = "#e06060";
               statusText.textContent = "Failed (bad response)";
             }
             resolve();
           } else {
-            bar.style.background = "#f56565";
+            bar.style.background = "#e06060";
             statusText.textContent = "Failed (server error)";
             reject();
           }
         };
 
         xhr.onerror = () => {
-          bar.style.background = "#f56565";
+          bar.style.background = "#e06060";
           statusText.textContent = "Failed (network error)";
           reject();
         };
