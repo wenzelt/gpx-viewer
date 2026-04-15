@@ -609,7 +609,7 @@ footer {
       <path d="M32 12c-9 0-16 7.163-16 16 0 11.5 16 24 16 24s16-12.5 16-24c0-8.837-7-16-16-16zm0 22a6 6 0 1 1 0-12 6 6 0 0 1 0 12z" fill="url(#nav-g)"/>
       <path d="M18 44c4-6 10-10 14-10s10 4 14 10" stroke="url(#nav-trail)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
-    TrailBlaze
+    TrailBlaze GPX Viewer
   </div>
   <div class="nav-links">
     <a href="#features">Features</a>
@@ -680,14 +680,6 @@ footer {
               <img src="assets/images/app_map_view.jpg" alt="TrailBlaze map showing GPS routes" width="280" height="300" loading="lazy">
               <div class="phone-map-overlay"></div>
             </div>
-          </div>
-        </div>
-      </div>
-      <!-- Secondary floating phone -->
-      <div class="hero-phone-secondary">
-        <div class="phone-frame-sm">
-          <div class="phone-screen-sm">
-            <img src="assets/images/app_home_view.jpg" alt="TrailBlaze hero phone" width="190" height="388" loading="lazy">
           </div>
         </div>
       </div>
@@ -829,9 +821,24 @@ footer {
           </div>
         </div>
       </div>
-      <div>
-        <div class="how-visual">
-          <img id="how-visual-img" src="assets/images/app_home_view.jpg" alt="TrailBlaze on mobile showing GPS map" width="340" height="600" loading="lazy">
+      <div style="display:flex;justify-content:center;align-items:center;">
+        <div class="hero-phone-wrap" style="animation:none;">
+          <div class="phone-frame">
+            <div class="phone-notch"></div>
+            <div class="phone-screen">
+              <div class="phone-status"></div>
+              <div class="phone-app-header">
+                <div class="phone-app-title">
+                  <svg class="map-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+                  TrailBlaze GPX Viewer
+                </div>
+              </div>
+              <div class="phone-map" style="margin:12px;border-radius:12px;flex:1;overflow:hidden;position:relative;">
+                <img id="how-visual-img" src="assets/images/app_map_view.jpg" alt="TrailBlaze on mobile showing GPS map" width="280" height="400" loading="lazy" style="width:100%;height:100%;object-fit:cover;object-position:top center;">
+                <div class="phone-map-overlay"></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
