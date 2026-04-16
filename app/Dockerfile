@@ -2,12 +2,15 @@
 FROM node:20-slim AS builder
 WORKDIR /build
 
+# Install tailwindcss explicitly to ensure the executable is found
+RUN npm install -g tailwindcss
+
 # We need the HTML file to know which classes to keep
 COPY static/index.html ./static/index.html
 
-# Run the standalone Tailwind CLI to generate the minified CSS
+# Run the Tailwind CLI to generate the minified CSS
 # This scans index.html and outputs only the used styles to tailwind-dist.css
-RUN npx tailwindcss -c /dev/null -i /dev/null -o ./static/tailwind-dist.css --content "./static/index.html" --minify
+RUN tailwindcss -o ./static/tailwind-dist.css --content "./static/index.html" --minify
 
 # --- Stage 2: Final App ---
 FROM python:3.11-slim
