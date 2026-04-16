@@ -41,6 +41,7 @@ CORS_ALLOW_CREDENTIALS: bool = os.environ.get(
     "ALLOW_CREDENTIALS", "false"
 ).strip().lower() in {"1", "true", "yes", "on"}
 TRACKS_PAGE_MAX: int = int(os.environ.get("TRACKS_PAGE_MAX", "1000"))
+GEOM_SIMPLIFY_TOLERANCE: float = float(os.environ.get("GEOM_SIMPLIFY_TOLERANCE", "0.0001"))
 APP_TITLE = "Local GPX Viewer"
 APP_VERSION = "1.1"
 
@@ -389,7 +390,10 @@ def _build_tracks_serialized(
             track_elevation_gain_m,
         ) in db.execute(stmt):
             try:
-                geometry = _ensure_multilinestring(to_shape(track_geom))
+                raw_geom = to_shape(track_geom)
+                if GEOM_SIMPLIFY_TOLERANCE > 0:
+                    raw_geom = raw_geom.simplify(GEOM_SIMPLIFY_TOLERANCE, preserve_topology=True)
+                geometry = _ensure_multilinestring(raw_geom)
             except ValueError as err:
                 logger.warning("Skipping track %s: %s", track_id, err)
                 continue
