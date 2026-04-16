@@ -7,23 +7,28 @@
   <title>TrailBlaze — GPX Viewer</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   
-  <!-- Preconnect to external origins -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <!-- Preconnect to essential origins only -->
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preconnect" href="https://api.fontshare.com">
-  <link rel="preconnect" href="https://cdn.fontshare.com">
   <link rel="preconnect" href="https://unpkg.com">
+  <link rel="preconnect" href="https://a.tile.openstreetmap.org">
 
-  <!-- Render-blocking CSS and Tailwind -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Preload LCP map tile and fonts with high priority -->
+  <link rel="preload" href="https://a.tile.openstreetmap.org/1/0/0.png" as="image" fetchpriority="high">
   
+  <!-- Async CSS to avoid render blocking -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" media="print" onload="this.media='all'"/>
+  
+  <!-- Preload fonts to avoid layout shifts and flashes -->
+  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=Space+Mono:wght@400;700&display=swap" as="style">
+  <link rel="preload" href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" as="style">
+
   <!-- Deferred scripts -->
+  <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/feather-icons" defer></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <style>
     /* ── Trail-theme overrides (harmonise with landing page) ── */
     :root {
@@ -41,11 +46,11 @@
     .bg-gray-900 { background-color: #0a0d0a !important; }
     .bg-gray-800 { background-color: #141a14 !important; }
 
-    /* Text colours */
+    /* Text colours - Improved Contrast */
     .text-gray-200 { color: #e8ede8 !important; }
-    .text-gray-400 { color: #8a9e8a !important; }
+    .text-gray-400 { color: #a5b5a5 !important; } /* Lightened from #8a9e8a */
     .text-gray-100 { color: #e8ede8 !important; }
-    .text-gray-500 { color: #4a5e4a !important; }
+    .text-gray-500 { color: #7a8e7a !important; } /* Lightened from #4a5e4a */
 
     /* Primary green */
     .text-green-400  { color: #5db87a !important; }
