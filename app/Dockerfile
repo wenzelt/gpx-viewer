@@ -16,7 +16,7 @@ COPY static/index.html ./static/index.html
 
 # Run the Tailwind CLI to generate the minified CSS
 # This scans index.html, uses input.css, and outputs to tailwind-dist.css
-RUN npx tailwindcss -i input.css -o ./static/tailwind-dist.css --minify
+RUN ./node_modules/.bin/tailwindcss -i input.css -o ./static/tailwind-dist.css --minify
 
 # --- Stage 2: Final App ---
 FROM python:3.11-slim
