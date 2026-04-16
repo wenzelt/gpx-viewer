@@ -547,11 +547,8 @@
     });
     // ─────────────────────────────────────────────────────────────
 
-    // Initial: backfill stats for any pre-existing tracks, then load
-    fetch('/backfill_stats', { method: 'POST' })
-      .catch(() => {}) // best-effort; never blocks the map
-      .finally(() => loadTracks({ force: true }));
-    feather.replace();
-  </script>
+    // Initial: load tracks
+    loadTracks({ force: true });
+    feather.replace();  </script>
 </body>
 </html>

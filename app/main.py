@@ -30,7 +30,6 @@ from sqlalchemy.orm import Session
 
 from db import SessionLocal, init_db
 from models import Track
-from track_stats import calculate_track_distance_m, calculate_elevation_gain_m
 
 # ------------------------------------------------------------------------------
 # Settings
@@ -75,26 +74,26 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 class TracksCache:
     def __init__(self) -> None:
         self._lock = Lock()
-        self._payload: dict[str, Any] | None = None
+        self._serialized_data: bytes | None = None
         self._etag: str | None = None
+        self._version: int = 1
 
     def invalidate(self) -> None:
         with self._lock:
-            self._payload = None
+            self._version += 1
+            self._serialized_data = None
             self._etag = None
 
-    def get_payload(
-        self, loader: Callable[[], tuple[dict[str, Any], str]]
-    ) -> tuple[dict[str, Any], str]:
+    def get_response(self, loader: Callable[[], tuple[bytes, str]]) -> Response:
         with self._lock:
-            if self._payload is not None and self._etag is not None:
-                return self._payload, self._etag
-            # Keep computation under lock to prevent concurrent cache misses
-            # from recomputing the same expensive payload.
-            payload, etag = loader()
-            self._payload = payload
-            self._etag = etag
-            return payload, etag
+            if self._serialized_data is None:
+                self._serialized_data, self._etag = loader()
+
+            return Response(
+                content=self._serialized_data,
+                media_type="application/json",
+                headers={"ETag": self._etag, "Cache-Control": "no-cache"},
+            )
 
 
 tracks_cache = TracksCache()
@@ -141,41 +140,6 @@ def bytes_exceeds_limit(b: bytes, limit_bytes: int = MAX_UPLOAD_BYTES) -> bool:
     return len(b) > limit_bytes
 
 
-def _downsample_points(points: list, sample_percent: int = 10) -> list:
-    """Return a deterministic subset of points for rendering.
-
-    Keeps roughly ``sample_percent`` of the original points, always preserving
-    the first and last point when at least two points are present.
-    """
-    if not points:
-        return points
-
-    if len(points) <= 2:
-        return points
-
-    sample_percent = max(1, min(sample_percent, 100))
-
-    interior_points = points[1:-1]
-    interior_target = max(
-        0,
-        min(
-            len(interior_points),
-            round(len(points) * sample_percent / 100) - 2,
-        ),
-    )
-    if interior_target == 0:
-        return [points[0], points[-1]]
-
-    step = len(interior_points) / interior_target
-    kept = [points[0]]
-    kept.extend(
-        interior_points[min(len(interior_points) - 1, int(i * step))]
-        for i in range(interior_target)
-    )
-    kept.append(points[-1])
-    return kept
-
-
 def _coords_from_points(points: Iterable) -> list[tuple[float, float]]:
     # Filters out points without both lon/lat, keeps only 2D
     out: list[tuple[float, float]] = []
@@ -188,21 +152,19 @@ def _coords_from_points(points: Iterable) -> list[tuple[float, float]]:
     return out
 
 
-def _lines_from_gpx(gpx: gpxpy.gpx.GPX, sample_percent: int = 10) -> list[LineString]:
+def _lines_from_gpx(gpx: gpxpy.gpx.GPX) -> list[LineString]:
     lines: list[LineString] = []
 
     # Tracks → segments
     for trk in gpx.tracks:
         for seg in trk.segments:
-            pts = _downsample_points(seg.points, sample_percent)
-            coords = _coords_from_points(pts)
+            coords = _coords_from_points(seg.points)
             if len(coords) >= 2:
                 lines.append(LineString(coords))
 
     # Routes
     for rte in gpx.routes:
-        pts = _downsample_points(rte.points, sample_percent)
-        coords = _coords_from_points(pts)
+        coords = _coords_from_points(rte.points)
         if len(coords) >= 2:
             lines.append(LineString(coords))
 
@@ -314,8 +276,14 @@ async def _process_upload_file(
         logger.warning("%s has no valid track points", filename)
         return UploadOutcome(filename, "skipped", "No valid track points")
 
-    all_points = [p for trk in gpx.tracks for seg in trk.segments for p in seg.points]
-    all_points += [p for rte in gpx.routes for p in rte.points]
+    total_distance_m = 0.0
+    total_uphill_m = 0.0
+    for trk in gpx.tracks:
+        total_distance_m += trk.length_2d()
+        total_uphill_m += trk.get_uphill_downhill().uphill
+    for rte in gpx.routes:
+        total_distance_m += rte.length_2d()
+        total_uphill_m += rte.get_uphill_downhill().uphill
 
     try:
         mls = _merge_to_multilinestring(lines)
@@ -325,8 +293,8 @@ async def _process_upload_file(
             tag=extract_tag(filename),
             hash=file_hash,
             geom=from_shape(mls, srid=4326),
-            total_distance_m=calculate_track_distance_m(all_points),
-            total_elevation_gain_m=calculate_elevation_gain_m(all_points),
+            total_distance_m=total_distance_m,
+            total_elevation_gain_m=total_uphill_m,
         )
         db.add(track)
     except Exception:
@@ -388,9 +356,9 @@ async def upload_gpx(
     return {"results": [outcome.as_dict() for outcome in outcomes]}
 
 
-def _build_tracks_payload(
+def _build_tracks_serialized(
     limit: int | None = None, offset: int = 0
-) -> tuple[dict[str, Any], str]:
+) -> bytes:
     features: list[dict[str, Any]] = []
     stmt = (
         select(
@@ -444,11 +412,7 @@ def _build_tracks_payload(
             )
 
     payload = {"type": "FeatureCollection", "features": features}
-    encoded = jsonable_encoder(payload)
-    etag = compute_sha256(
-        json.dumps(encoded, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    )
-    return encoded, etag
+    return json.dumps(jsonable_encoder(payload)).encode("utf-8")
 
 
 @app.get("/tracks")
@@ -461,62 +425,31 @@ def get_tracks(
 
     is_default_query = limit is None and offset == 0
     if is_default_query:
-        payload, etag = tracks_cache.get_payload(_build_tracks_payload)
-    else:
-        payload, etag = _build_tracks_payload(limit=limit, offset=offset)
+        # Check ETag before loading/serializing
+        etag = str(tracks_cache._version)
+        if request.headers.get("if-none-match") == etag:
+            return Response(
+                status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"}
+            )
+        
+        return tracks_cache.get_response(
+            lambda: (_build_tracks_serialized(), etag)
+        )
+
+    # For non-default queries, we don't cache but still provide a deterministic ETag
+    serialized = _build_tracks_serialized(limit=limit, offset=offset)
+    etag = compute_sha256(serialized)
 
     if request.headers.get("if-none-match") == etag:
         return Response(
             status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"}
         )
 
-    response = JSONResponse(payload)
-    response.headers["ETag"] = etag
-    response.headers["Cache-Control"] = "no-cache"
-    return response
-
-
-@app.post("/backfill_stats")
-def backfill_stats() -> dict[str, int]:
-    """Recompute distance for tracks that have NULL distance.
-
-    Elevation cannot be recovered from the stored 2D geometry — it is only
-    available during the original upload.  Tracks without elevation data will
-    show '—' in the UI; re-uploading the GPX file will populate it properly.
-
-    Also clears any previously-set 0.0 elevation placeholders back to NULL so
-    the UI shows an honest '—' instead of a misleading '0 m'.
-    """
-    updated = 0
-    stmt = select(Track).where(Track.total_distance_m.is_(None))
-    with SessionLocal() as db:
-        # Reset any false 0.0 elevations written by an earlier buggy backfill
-        db.execute(
-            sa_update(Track)
-            .where(Track.total_elevation_gain_m == 0.0)
-            .values(total_elevation_gain_m=None)
-        )
-
-        tracks = db.execute(stmt).scalars().all()
-        for track in tracks:
-            try:
-                raw_geom = to_shape(track.geom)
-                mls = _ensure_multilinestring(raw_geom)
-                coords = [
-                    type("P", (), {"latitude": lat, "longitude": lon, "elevation": None})()
-                    for geom in mls.geoms
-                    for lon, lat in geom.coords
-                ]
-                track.total_distance_m = calculate_track_distance_m(coords)
-                # total_elevation_gain_m intentionally left as NULL — elevation
-                # is not stored in the geometry and cannot be recomputed here.
-                updated += 1
-            except Exception:
-                logger.exception("Could not backfill stats for track %s", track.id)
-        db.commit()
-    if updated:
-        tracks_cache.invalidate()
-    return {"updated": updated}
+    return Response(
+        content=serialized,
+        media_type="application/json",
+        headers={"ETag": etag, "Cache-Control": "no-cache"},
+    )
 
 
 @app.delete("/delete_all")
