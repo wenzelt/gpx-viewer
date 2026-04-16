@@ -1,133 +1,74 @@
-# GPX Viewer
+# TrailBlaze — GPX Viewer
 
-A lightweight GPX track visualizer running in Docker.  
-Upload `.gpx` files via a simple web interface, and view them on an interactive OpenStreetMap world map.
+A high-performance, aesthetically refined GPX track visualizer.  
+Upload, analyze, and manage your outdoor adventures through a seamless web interface.
 
-Built with:
-- [FastAPI](https://fastapi.tiangolo.com/) (backend API & upload service)
-- [PostGIS](https://postgis.net/) (store and query tracks)
-- [Leaflet.js](https://leafletjs.com/) + [OpenStreetMap](https://www.openstreetmap.org/) (map visualization)
-- Docker Compose (for easy setup)
+![App Home View](assets/images/app_home_view.jpg)
+![App Map View](assets/images/app_map_view.jpg)
 
----
+## 🚀 Key Features
 
-## Features
+- **Blazing Fast Visualization**: Optimized for performance with on-the-fly Ramer-Douglas-Peucker (RDP) geometry simplification, reducing massive track data into lightweight, visually accurate map paths.
+- **Intelligent Caching**: Advanced ETag-based caching with versioned payloads ensures near-instant repeat loads and zero redundant data transfer.
+- **Rich Track Stats**: Automatic calculation of total 2D distance and cumulative elevation gain (uphill) for every track using high-precision `gpxpy` algorithms.
+- **Modern UI**: Dark-themed, forest-inspired interface with responsive controls, fullscreen map mode, and intuitive drag-and-drop uploading.
+- **Robust Storage**: Built on PostGIS for high-accuracy spatial data storage and retrieval, persisting your entire history across sessions.
 
-- 📂 Drag & drop multiple `.gpx` files to upload at once
-- 📊 Per-file upload status (success, skipped, failed)
-- 🌍 All tracks shown on a scrollable/zoomable world map
-- 💾 Tracks stored in PostGIS with spatial indexing
-- 🔄 Persists data across container restarts
+## 🛠️ Built With
 
----
+- **Backend**: [FastAPI](https://fastapi.tiangolo.com/) (Python)
+- **Database**: [PostGIS](https://postgis.net/) (PostgreSQL + Spatial Extensions)
+- **Frontend**: [Leaflet.js](https://leafletjs.com/), [TailwindCSS](https://tailwindcss.com/), [Feather Icons](https://feathericons.com/)
+- **Processing**: [gpxpy](https://github.com/tkrajina/gpxpy), [Shapely](https://shapely.readthedocs.io/)
+- **Infrastructure**: [Docker Compose](https://www.docker.com/)
 
-## Prerequisites
+## 🏁 Getting Started
 
-- macOS / Linux / Windows with [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed
-- `docker compose` command available (`docker compose version`)
+### Prerequisites
 
----
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Docker Engine with Compose.
 
-## Getting Started
+### Quick Start
 
-Clone the project:
+1. **Clone and Enter**:
+   ```bash
+   git clone https://github.com/wenzelt/trailblaze-gpx-viewer.git
+   cd trailblaze-gpx-viewer
+   ```
 
-```bash
-git clone https://github.com/yourname/gpx-viewer.git
-cd gpx-viewer
-```
+2. **Launch Services**:
+   ```bash
+   docker compose up --build
+   ```
 
-Start the stack:
+3. **Explore**:
+   Open [**http://localhost:8008**](http://localhost:8008) in your browser.
 
-```bash
-docker compose up --build
-```
+## 📖 How It Works
 
-Open the app:
+### Uploading Tracks
+Simply drag and drop one or more `.gpx` files onto the upload zone. The app performs a SHA-256 hash check to prevent duplicates before computing stats and storing the geometry in PostGIS.
 
-👉 [http://localhost:8000](http://localhost:8000)
+### Efficient Rendering
+To maintain a smooth 60fps experience even with thousands of tracks, TrailBlaze simplifies geometries on-the-fly when serving the API. This removes redundant GPS "noise" while preserving the exact path of your adventure.
 
----
+### Caching Strategy
+The `/tracks` endpoint uses a versioned cache. If no data has changed, the server returns a `304 Not Modified` in milliseconds. If changes occur, the server sends a pre-serialized binary payload, bypassing heavy JSON encoding.
 
-## Usage
+## ⚙️ Configuration
 
-1. Drag & drop `.gpx` files onto the upload box (or click to select).
-2. Uploaded tracks will be stored in PostGIS and immediately shown on the map.
-3. Upload multiple files at once — each will report **ok / failed / skipped**.
-4. Tracks persist across restarts (stored in a Docker volume).
+Environment variables can be tuned in `.env`:
 
-Example API calls:
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MAX_UPLOAD_MB` | `50` | Maximum allowed GPX file size |
+| `GEOM_SIMPLIFY_TOLERANCE` | `0.0001` | RDP simplification threshold (approx. 11m) |
+| `DB_DSN` | *(derived)* | PostGIS connection string |
 
-- Upload with `curl`:
+## 🤝 Contributing
 
-  ```bash
-  curl -F "files=@/path/to/track1.gpx"        -F "files=@/path/to/track2.gpx"        http://localhost:8000/upload
-  ```
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-- List all tracks as GeoJSON:
+## 📜 License
 
-  ```bash
-  curl http://localhost:8000/tracks
-  ```
-
-- Health check:
-
-  ```bash
-  curl http://localhost:8000/health
-  ```
-
----
-
-## Project Structure
-
-```
-gpx-viewer/
-├─ docker-compose.yml        # Services: PostGIS + FastAPI app
-├─ .env                      # Database credentials
-├─ app/
-│  ├─ Dockerfile             # FastAPI app container
-│  ├─ pyproject.toml         # Python dependencies (uv)
-│  ├─ main.py                # FastAPI endpoints
-│  ├─ models.py              # SQLAlchemy ORM models
-│  ├─ db.py                  # Database setup & session
-│  └─ static/
-│     └─ index.html          # Frontend (Leaflet + upload UI)
-```
-
----
-
-## Data Persistence
-
-- PostGIS data is stored in the Docker volume `gpx-viewer_pgdata`
-- Uploaded files are stored in `gpx-viewer_uploads` (not strictly needed, but mounted)
-
-To reset everything:
-
-```bash
-docker compose down -v
-```
-
----
-
-## Notes for Apple Silicon (M1/M2)
-
-If you see a platform mismatch warning for PostGIS, add this under the `db:` service in `docker-compose.yml`:
-
-```yaml
-platform: linux/arm64/v8
-```
-
----
-
-## Roadmap / Ideas
-
-- Delete/reset tracks from the UI
-- Store GPX metadata (activity type, distance, elevation)
-- Add authentication if exposing publicly
-- Geometry simplification for large datasets
-
----
-
-## License
-
-MIT – feel free to fork and adapt.
+Distributed under the MIT License. See `LICENSE` for more information.

@@ -12,19 +12,13 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://api.fontshare.com">
   <link rel="preconnect" href="https://cdn.fontshare.com">
-  <link rel="preconnect" href="https://a.tile.openstreetmap.org">
-  <link rel="preconnect" href="https://b.tile.openstreetmap.org">
-  <link rel="preconnect" href="https://c.tile.openstreetmap.org">
+  <link rel="preconnect" href="https://unpkg.com">
 
-  <!-- Preload LCP tile and fonts -->
-  <link rel="preload" href="https://a.tile.openstreetmap.org/1/0/0.png" as="image" fetchpriority="high">
-  <link rel="preload" href="https://cdn.fontshare.com/GHM6WVH6M/SpaceGrotesk-Regular.woff2" as="font" type="font/woff2" crossorigin>
-
-  <!-- Render-blocking CSS -->
+  <!-- Render-blocking CSS and Tailwind -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://cdn.tailwindcss.com"></script>
   
-  <!-- Scripts - Deferred to avoid render blocking -->
-  <script src="https://cdn.tailwindcss.com" defer></script>
+  <!-- Deferred scripts -->
   <script src="https://unpkg.com/feather-icons" defer></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 
@@ -32,10 +26,14 @@
   <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
   <style>
     /* ── Trail-theme overrides (harmonise with landing page) ── */
+    :root {
+      font-display: swap;
+    }
     body {
       font-family: 'Satoshi', 'Space Grotesk', 'Inter', sans-serif !important;
       background-color: #0a0d0a !important;
       color: #e8ede8 !important;
+      min-height: 100vh;
     }
     h1, h2, h3 { font-family: 'Space Grotesk', 'Helvetica Neue', sans-serif !important; }
 
@@ -69,11 +67,28 @@
     .text-blue-500  { color: #5b9bd5 !important; }
     .text-red-400   { color: #e06060 !important; }
 
+    /* Fixed icon sizes to prevent layout shift */
+    i[data-feather] {
+      width: 24px;
+      height: 24px;
+      display: inline-block;
+    }
+    .w-12.h-12 i[data-feather] {
+      width: 48px;
+      height: 48px;
+    }
+
     /* Dropzone drag-over state */
     .dropzone-active { background-color: #141a14; border-color: #4a5e4a; }
 
     /* Progress bar */
-    #map { height: calc(100vh - 200px); z-index: 1; }
+    #map { 
+      height: 600px; /* Fixed height for LCP/CLS stability */
+      max-height: calc(100vh - 300px);
+      min-height: 400px;
+      z-index: 1; 
+      background: #0a0d0a; /* Prevent flash of white */
+    }
     #mapLoader { backdrop-filter: blur(2px); }
     .dropzone { transition: all 0.3s ease; }
     .progress-container { margin-top: 6px; }
