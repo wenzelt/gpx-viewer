@@ -72,6 +72,37 @@
       background: #5db87a;
       transition: width 0.2s ease;
     }
+
+    /* Fullscreen map */
+    #mapWrapper { position: relative; }
+    #mapWrapper.map-fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      border-radius: 0;
+    }
+    #mapWrapper.map-fullscreen #map {
+      height: 100% !important;
+      border-radius: 0;
+    }
+    #fullscreenBtn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 1000;
+      background: #141a14cc;
+      border: 1px solid #374437;
+      color: #e8ede8;
+      border-radius: 6px;
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #fullscreenBtn:hover { background: #1e2a1e; }
   </style>
 </head>
 <body class="bg-gray-900 text-gray-200 min-h-screen">
@@ -112,12 +143,15 @@
       </div>
 
       <!-- Map -->
-      <div class="relative rounded-xl overflow-hidden shadow-xl">
+      <div id="mapWrapper" class="rounded-xl overflow-hidden shadow-xl">
         <div id="map" class="w-full"></div>
         <div id="mapLoader" class="absolute inset-0 flex flex-col items-center justify-center space-y-3 bg-black/60 text-gray-100 hidden">
           <div class="w-10 h-10 border-4 border-green-400 border-t-transparent rounded-full animate-spin"></div>
           <p id="mapLoaderMessage" class="text-sm tracking-wide uppercase">Loading tracks…</p>
         </div>
+        <button id="fullscreenBtn" title="Toggle fullscreen">
+          <i id="fullscreenIcon" data-feather="maximize"></i>
+        </button>
       </div>
 
       <!-- Stats -->
@@ -215,6 +249,29 @@
     const statDistance = document.getElementById('statDistance');
     const statElevation = document.getElementById('statElevation');
 
+    // ── DE-style number formatting ──────────────────────────────
+    function formatDeNumber(value, decimals = 0) {
+      return new Intl.NumberFormat('de-DE', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      }).format(value);
+    }
+
+    function formatDistance(totalDistanceM) {
+      if (totalDistanceM == null) return '—';
+      const distKm = totalDistanceM / 1000;
+      if (distKm >= 1) {
+        return formatDeNumber(distKm, 1) + '\u202fkm';
+      }
+      return formatDeNumber(Math.round(totalDistanceM)) + '\u202fm';
+    }
+
+    function formatElevation(totalElevationGainM) {
+      if (totalElevationGainM == null) return '—';
+      return formatDeNumber(Math.round(totalElevationGainM)) + '\u202fm';
+    }
+    // ─────────────────────────────────────────────────────────────
+
     function updateStats(geojson) {
       const features = geojson.features || [];
 
@@ -240,18 +297,8 @@
         }
       }
 
-      if (hasDistance) {
-        const distKm = totalDistanceM / 1000;
-        statDistance.textContent = distKm >= 1
-          ? distKm.toFixed(1) + ' km'
-          : Math.round(totalDistanceM) + ' m';
-      } else {
-        statDistance.textContent = '—';
-      }
-
-      statElevation.textContent = hasElevation
-        ? Math.round(totalElevationGainM) + ' m'
-        : '—';
+      statDistance.textContent = hasDistance ? formatDistance(totalDistanceM) : '—';
+      statElevation.textContent = hasElevation ? formatElevation(totalElevationGainM) : '—';
 
       statsBar.classList.remove('hidden');
       feather.replace();
@@ -474,6 +521,31 @@
       }
       feather.replace();
     }
+
+    // ── Fullscreen toggle ─────────────────────────────────────────
+    const mapWrapper = document.getElementById('mapWrapper');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const fullscreenIcon = document.getElementById('fullscreenIcon');
+    let mapIsFullscreen = false;
+
+    fullscreenBtn.addEventListener('click', () => {
+      mapIsFullscreen = !mapIsFullscreen;
+      mapWrapper.classList.toggle('map-fullscreen', mapIsFullscreen);
+      fullscreenIcon.setAttribute('data-feather', mapIsFullscreen ? 'minimize' : 'maximize');
+      feather.replace();
+      map.invalidateSize();
+    });
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && mapIsFullscreen) {
+        mapIsFullscreen = false;
+        mapWrapper.classList.remove('map-fullscreen');
+        fullscreenIcon.setAttribute('data-feather', 'maximize');
+        feather.replace();
+        map.invalidateSize();
+      }
+    });
+    // ─────────────────────────────────────────────────────────────
 
     // Initial: backfill stats for any pre-existing tracks, then load
     fetch('/backfill_stats', { method: 'POST' })
