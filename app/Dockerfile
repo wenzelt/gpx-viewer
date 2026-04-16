@@ -2,20 +2,16 @@
 FROM node:20-slim AS builder
 WORKDIR /build
 
-# Install tailwindcss
-RUN npm install tailwindcss
+# Install Tailwind CSS v4 CLI
+RUN npm install @tailwindcss/cli
 
-# Create a minimal tailwind.config.js
-RUN echo "module.exports = { content: ['./static/index.html'], theme: { extend: {}, }, plugins: [], }" > tailwind.config.js
-
-# Create a minimal input.css with tailwind directives
-RUN echo "@tailwind base; @tailwind components; @tailwind utilities;" > input.css
+# Create a minimal input.css with tailwind import (v4 syntax)
+RUN echo "@import 'tailwindcss';" > input.css
 
 # We need the HTML file to scan for classes
 COPY static/index.html ./static/index.html
 
 # Run the Tailwind CLI to generate the minified CSS
-# This scans index.html, uses input.css, and outputs to tailwind-dist.css
 RUN ./node_modules/.bin/tailwindcss -i input.css -o ./static/tailwind-dist.css --minify
 
 # --- Stage 2: Final App ---
