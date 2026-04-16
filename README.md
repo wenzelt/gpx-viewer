@@ -10,6 +10,7 @@ Upload, analyze, and manage your outdoor adventures through a seamless web inter
 
 - **Blazing Fast Visualization**: Optimized for performance with on-the-fly Ramer-Douglas-Peucker (RDP) geometry simplification, reducing massive track data into lightweight, visually accurate map paths.
 - **Intelligent Caching**: Advanced ETag-based caching with versioned payloads ensures near-instant repeat loads and zero redundant data transfer.
+- **Performance Optimized**: Audited for Lighthouse performance with asynchronous asset loading, LCP priority preloading, and minimal render-blocking requests.
 - **Rich Track Stats**: Automatic calculation of total 2D distance and cumulative elevation gain (uphill) for every track using high-precision `gpxpy` algorithms.
 - **Modern UI**: Dark-themed, forest-inspired interface with responsive controls, fullscreen map mode, and intuitive drag-and-drop uploading.
 - **Robust Storage**: Built on PostGIS for high-accuracy spatial data storage and retrieval, persisting your entire history across sessions.
@@ -49,11 +50,11 @@ Upload, analyze, and manage your outdoor adventures through a seamless web inter
 ### Uploading Tracks
 Simply drag and drop one or more `.gpx` files onto the upload zone. The app performs a SHA-256 hash check to prevent duplicates before computing stats and storing the geometry in PostGIS.
 
-### Efficient Rendering
-To maintain a smooth 60fps experience even with thousands of tracks, TrailBlaze simplifies geometries on-the-fly when serving the API. This removes redundant GPS "noise" while preserving the exact path of your adventure.
+### Efficient Rendering & Performance
+To maintain a smooth 60fps experience even with thousands of tracks, TrailBlaze simplifies geometries on-the-fly when serving the API using the Ramer-Douglas-Peucker algorithm. This removes redundant GPS "noise" while preserving the exact path of your adventure. The frontend is further optimized for low-latency loading by eliminating render-blocking CSS and utilizing `fetchpriority` for critical map assets.
 
 ### Caching Strategy
-The `/tracks` endpoint uses a versioned cache. If no data has changed, the server returns a `304 Not Modified` in milliseconds. If changes occur, the server sends a pre-serialized binary payload, bypassing heavy JSON encoding.
+The `/tracks` endpoint uses a versioned cache. If no data has changed, the server returns a `304 Not Modified` in milliseconds. If changes occur, the server sends a pre-serialized binary payload, bypassing heavy JSON encoding and ensuring the fastest possible delivery to the browser.
 
 ## ⚙️ Configuration
 
