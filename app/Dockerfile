@@ -2,15 +2,21 @@
 FROM node:20-slim AS builder
 WORKDIR /build
 
-# Install tailwindcss locally (more reliable in Docker than global install)
+# Install tailwindcss
 RUN npm install tailwindcss
 
-# We need the HTML file to know which classes to keep
+# Create a minimal tailwind.config.js
+RUN echo "module.exports = { content: ['./static/index.html'], theme: { extend: {}, }, plugins: [], }" > tailwind.config.js
+
+# Create a minimal input.css with tailwind directives
+RUN echo "@tailwind base; @tailwind components; @tailwind utilities;" > input.css
+
+# We need the HTML file to scan for classes
 COPY static/index.html ./static/index.html
 
 # Run the Tailwind CLI to generate the minified CSS
-# Using npx to run the locally installed tailwindcss
-RUN npx tailwindcss -o ./static/tailwind-dist.css --content "./static/index.html" --minify
+# This scans index.html, uses input.css, and outputs to tailwind-dist.css
+RUN npx tailwindcss -i input.css -o ./static/tailwind-dist.css --minify
 
 # --- Stage 2: Final App ---
 FROM python:3.11-slim
