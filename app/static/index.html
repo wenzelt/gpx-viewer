@@ -110,12 +110,17 @@
     #mapWrapper { position: relative; }
     #mapWrapper.map-fullscreen {
       position: fixed;
-      inset: 0;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
       z-index: 9999;
       border-radius: 0;
+      background: #0a0d0a;
     }
     #mapWrapper.map-fullscreen #map {
       height: 100% !important;
+      max-height: none !important;
       border-radius: 0;
     }
     #fullscreenBtn {
