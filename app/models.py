@@ -4,16 +4,28 @@ from datetime import datetime
 from typing import Any
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Float, Integer, String, DateTime, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, declarative_base
+from sqlalchemy import Float, Integer, String, DateTime, UniqueConstraint, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, declarative_base, relationship
 
 Base = declarative_base()
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)  # Hashed seed phrase
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    tracks: Mapped[list[Track]] = relationship("Track", back_populates="user", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"User(id={self.id!r}, created_at={self.created_at!r})"
+
 class Track(Base):
     __tablename__ = "tracks"
-    __table_args__ = (UniqueConstraint("hash", name="uq_track_hash"),)
+    __table_args__ = (UniqueConstraint("user_id", "hash", name="uq_user_track_hash"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
     filename: Mapped[str | None] = mapped_column(String, nullable=True)
     tag: Mapped[str | None] = mapped_column(String, nullable=True)
     hash: Mapped[str] = mapped_column(String, nullable=False)
@@ -26,5 +38,7 @@ class Track(Base):
         Geometry(geometry_type="MULTILINESTRING", srid=4326, spatial_index=True)
     )
 
+    user: Mapped[User] = relationship("User", back_populates="tracks")
+
     def __repr__(self) -> str:
-        return f"Track(id={self.id!r}, filename={self.filename!r}, tag={self.tag!r})"
+        return f"Track(id={self.id!r}, filename={self.filename!r}, tag={self.tag!r}, user_id={self.user_id!r})"

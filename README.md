@@ -8,6 +8,7 @@ Upload, analyze, and manage your outdoor adventures through a seamless web inter
 
 ## 🚀 Key Features
 
+- **Privacy-First Architecture**: Anonymous vaults using randomly generated seed phrases. Zero collection of PII (emails, names, passwords) ensures total user isolation and DSGVO/GDPR compliance.
 - **Blazing Fast Visualization**: Optimized for performance with on-the-fly Ramer-Douglas-Peucker (RDP) geometry simplification, reducing massive track data into lightweight, visually accurate map paths.
 - **Intelligent Caching**: Advanced ETag-based caching with versioned payloads ensures near-instant repeat loads and zero redundant data transfer.
 - **Performance Optimized**: Audited for Lighthouse performance with asynchronous asset loading, LCP priority preloading, and minimal render-blocking requests.
@@ -75,7 +76,13 @@ Tracks without a recognized category default to a deep blue color.
 To maintain a smooth 60fps experience even with thousands of tracks, TrailBlaze simplifies geometries on-the-fly when serving the API using the Ramer-Douglas-Peucker algorithm. This removes redundant GPS "noise" while preserving the exact path of your adventure. The frontend is further optimized for low-latency loading by eliminating render-blocking CSS and utilizing `fetchpriority` for critical map assets.
 
 ### Caching Strategy
-The `/tracks` endpoint uses a versioned cache. If no data has changed, the server returns a `304 Not Modified` in milliseconds. If changes occur, the server sends a pre-serialized binary payload, bypassing heavy JSON encoding and ensuring the fastest possible delivery to the browser.
+The `/tracks` endpoint uses a user-versioned cache. If no data has changed for the authenticated user, the server returns a `304 Not Modified`. If changes occur, the server sends a pre-serialized binary payload, bypassing heavy JSON encoding.
+
+### Privacy & Data Isolation
+TrailBlaze is designed to be exposed publicly while keeping every user's data 100% private:
+- **Anonymous Authentication**: Your "account" is identified solely by a secret multi-word key.
+- **Cryptographic Hashing**: The backend never sees or stores your raw key; it only stores a one-way hash.
+- **Complete Erasure**: The "Delete Vault" feature fulfills the GDPR Right to Erasure, instantly wiping all your tracks and your hashed identifier from the database.
 
 ## ⚙️ Configuration
 
@@ -89,10 +96,10 @@ Environment variables can be tuned in `.env`:
 
 ## 🗺️ Roadmap
 
-- [x] **Delete tracks from the UI**: "Delete All" button implemented.
+- [x] **Delete tracks from the UI**: "Clear All" and "Delete Vault" implemented.
 - [x] **Store GPX metadata**: Activity type (via tagging), distance, and elevation gain.
 - [x] **Geometry simplification**: On-the-fly RDP simplification for high-performance rendering.
-- [ ] **Authentication**: Add OIDC or simple auth if exposing the service publicly.
+- [x] **Privacy by Design**: Multi-user isolation via anonymous seed phrases.
 - [ ] **Individual Track Deletion**: Allow deleting single tracks directly from the map or a list.
 
 ## 🤝 Contributing

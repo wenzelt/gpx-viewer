@@ -141,17 +141,64 @@
       transition: background 0.2s;
     }
     #fullscreenBtn:hover { background: #1e2a1e; }
+
+    /* Vault Overlay */
+    #vaultOverlay { backdrop-filter: blur(8px); }
+    .select-all { user-select: all; }
   </style>
 </head>
 <body class="bg-gray-900 text-gray-200 min-h-screen">
+  <!-- Vault Onboarding Overlay -->
+  <div id="vaultOverlay" class="hidden fixed inset-0 z-[10000] bg-gray-900/95 flex items-center justify-center p-4">
+    <div class="bg-gray-800 border border-gray-700 rounded-2xl p-8 max-w-md w-full shadow-2xl">
+      <div class="flex flex-col items-center text-center">
+        <div class="w-16 h-16 bg-green-600/20 rounded-full flex items-center justify-center mb-6">
+          <i data-feather="lock" class="text-green-400 w-8 h-8"></i>
+        </div>
+        <h2 class="text-2xl font-bold mb-2">Welcome to TrailBlaze</h2>
+        <p class="text-gray-400 mb-8 text-sm">A private vault for your outdoor adventures. No email, no password, just your secret key.</p>
+        
+        <div id="onboardingActions" class="w-full space-y-4">
+          <button id="createVaultBtn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-xl transition flex items-center justify-center">
+             Create New Private Vault
+          </button>
+          <div class="relative py-4">
+            <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-700"></div></div>
+            <div class="relative flex justify-center text-xs uppercase"><span class="bg-gray-800 px-2 text-gray-500">Or restore vault</span></div>
+          </div>
+          <div class="flex space-x-2">
+            <input type="password" id="restoreSeedInput" placeholder="Enter your secret key..." class="flex-1 bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500">
+            <button id="restoreVaultBtn" class="bg-gray-700 hover:bg-gray-600 px-4 py-3 rounded-xl transition">
+               <i data-feather="arrow-right"></i>
+            </button>
+          </div>
+        </div>
+
+        <div id="seedDisplay" class="hidden w-full flex flex-col items-center">
+           <p class="text-xs text-yellow-500 font-medium mb-4 uppercase tracking-wider">⚠️ Save this key now. It cannot be recovered!</p>
+           <div class="bg-gray-900 border border-gray-700 rounded-xl p-4 w-full mb-6 font-mono text-green-400 break-words select-all cursor-pointer" id="generatedSeedText" title="Click to copy">
+           </div>
+           <button id="confirmSeedBtn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-xl transition">
+             I have saved my key
+           </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="container mx-auto px-4">
     <header class="py-6 flex flex-col md:flex-row md:items-center md:justify-between">
       <h1 class="text-2xl md:text-3xl font-bold text-green-400 flex items-center">
         <i data-feather="map" class="mr-2"></i> TrailBlaze GPX Viewer
       </h1>
-      <button id="deleteAll" class="mt-4 md:mt-0 bg-red-700 hover:bg-red-600 text-white px-4 py-2 rounded-lg flex items-center transition">
-        <i data-feather="trash-2" class="mr-2"></i> Delete All Tracks
-      </button>
+      <div class="mt-4 md:mt-0 flex items-center space-x-3">
+        <button id="vaultSettingsBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg flex items-center transition border border-gray-700">
+          <i data-feather="shield" class="mr-2"></i> Vault
+        </button>
+        <button id="deleteAll" class="bg-red-700 hover:bg-red-600 text-white px-4 py-2 rounded-lg flex items-center transition">
+          <i data-feather="trash-2" class="mr-2"></i> Clear All
+        </button>
+      </div>
     </header>
 
     <main>
@@ -218,7 +265,133 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-    // Initialize map
+    // ── Vault & Auth Logic ──────────────────────────────────────
+    const wordlist = [
+      "alpine", "amber", "arctic", "azure", "bamboo", "basalt", "beacon", "birch", "blaze", "boulder",
+      "breeze", "brook", "canyon", "cedar", "cliff", "cloud", "coast", "cobalt", "comet", "copper",
+      "crag", "creek", "crest", "crystal", "delta", "desert", "dew", "drift", "dusk", "eagle",
+      "earth", "echo", "elm", "ember", "estuary", "falcon", "fathom", "fern", "field", "fjord",
+      "flare", "flint", "flood", "flora", "flow", "forest", "frost", "gale", "glacier", "glen",
+      "glow", "gorge", "granite", "grass", "grove", "gully", "harbor", "haven", "hawk", "hazel",
+      "hearth", "heather", "height", "highland", "hill", "horizon", "ice", "island", "ivy", "jade",
+      "jasper", "jungle", "kelp", "lake", "leaf", "ledge", "light", "lily", "lime", "loam",
+      "loch", "lunar", "maple", "marsh", "meadow", "mesa", "meteor", "mist", "moss", "mount",
+      "nebula", "night", "north", "oak", "oasis", "ocean", "olive", "onyx", "orchard", "orchid",
+      "otter", "owl", "peak", "pebble", "pine", "plain", "plateau", "pond", "prairie", "quartz",
+      "quarry", "raft", "rain", "range", "rapid", "ravine", "reef", "ridge", "river", "road",
+      "rock", "rose", "sage", "salt", "sand", "savanna", "sea", "shale", "shell", "shore",
+      "sierra", "silver", "sky", "slate", "snow", "solar", "source", "south", "spark", "spring",
+      "spruce", "star", "steppe", "stone", "storm", "stream", "summit", "sun", "surf", "swamp",
+      "talisman", "tarn", "terra", "thistle", "thorn", "tide", "timber", "topaz", "torrent", "trail",
+      "tundra", "valley", "vapor", "velvet", "vent", "vertex", "vine", "violet", "volcano", "vortex",
+      "wall", "wave", "west", "wild", "willow", "wind", "wolf", "wood", "yarrow", "zenith", "zone"
+    ];
+
+    function generateSeed(length = 5) {
+      const result = [];
+      const crypto = window.crypto || window.msCrypto;
+      const array = new Uint32Array(length);
+      crypto.getRandomValues(array);
+      for (let i = 0; i < length; i++) {
+        result.push(wordlist[array[i] % wordlist.length]);
+      }
+      return result.join("-");
+    }
+
+    let activeSeed = localStorage.getItem('trailblaze_seed');
+
+    const vaultOverlay = document.getElementById('vaultOverlay');
+    const onboardingActions = document.getElementById('onboardingActions');
+    const seedDisplay = document.getElementById('seedDisplay');
+    const generatedSeedText = document.getElementById('generatedSeedText');
+    const restoreSeedInput = document.getElementById('restoreSeedInput');
+    const settingsModal = document.getElementById('settingsModal');
+    const settingsSeedText = document.getElementById('settingsSeedText');
+
+    function showVaultOnboarding() {
+      vaultOverlay.classList.remove('hidden');
+      onboardingActions.classList.remove('hidden');
+      seedDisplay.classList.add('hidden');
+    }
+
+    function hideVaultOnboarding() {
+      vaultOverlay.classList.add('hidden');
+      loadTracks({ force: true });
+    }
+
+    document.getElementById('createVaultBtn').addEventListener('click', async () => {
+      const seed = generateSeed();
+      generatedSeedText.textContent = seed;
+      onboardingActions.classList.add('hidden');
+      seedDisplay.classList.remove('hidden');
+      
+      // Initialize on backend
+      try {
+        await fetch('/auth/create', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${seed}` }
+        });
+        activeSeed = seed;
+      } catch (err) {
+        console.error("Failed to init vault", err);
+      }
+    });
+
+    document.getElementById('confirmSeedBtn').addEventListener('click', () => {
+      localStorage.setItem('trailblaze_seed', activeSeed);
+      hideVaultOnboarding();
+    });
+
+    document.getElementById('restoreVaultBtn').addEventListener('click', () => {
+      const val = restoreSeedInput.value.trim().toLowerCase();
+      if (val.length < 5) return;
+      activeSeed = val;
+      localStorage.setItem('trailblaze_seed', activeSeed);
+      hideVaultOnboarding();
+    });
+
+    document.getElementById('vaultSettingsBtn').addEventListener('click', () => {
+      settingsSeedText.textContent = activeSeed;
+      settingsModal.classList.remove('hidden');
+    });
+
+    document.getElementById('closeSettingsBtn').addEventListener('click', () => {
+      settingsModal.classList.add('hidden');
+    });
+
+    document.getElementById('deleteAccountBtn').addEventListener('click', async () => {
+      if (!confirm("Are you SURE? This will permanently delete your entire vault and all your tracks. This cannot be undone.")) return;
+      
+      try {
+        await fetch('/account', {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${activeSeed}` }
+        });
+        localStorage.removeItem('trailblaze_seed');
+        location.reload();
+      } catch (err) {
+        alert("Deletion failed: " + err.message);
+      }
+    });
+
+    [generatedSeedText, settingsSeedText].forEach(el => {
+      el.addEventListener('click', () => {
+        navigator.clipboard.writeText(el.textContent);
+        const oldText = el.textContent;
+        el.textContent = "Copied to clipboard!";
+        el.classList.add('text-white');
+        setTimeout(() => {
+          el.textContent = oldText;
+          el.classList.remove('text-white');
+        }, 1500);
+      });
+    });
+
+    if (!activeSeed) {
+      showVaultOnboarding();
+    }
+
+    // ── Initialize map ──────────────────────────────────────────
     const map = L.map('map', { worldCopyJump: true }).setView([20, 0], 2);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
@@ -376,7 +549,10 @@
       deleteAllBtn.disabled = true;
       deleteAllBtn.classList.add('opacity-60', 'cursor-not-allowed');
       try {
-        const res = await fetch("/delete_all", { method: "DELETE" });
+        const res = await fetch("/delete_all", { 
+          method: "DELETE",
+          headers: { 'Authorization': `Bearer ${activeSeed}` }
+        });
         if (!res.ok) throw new Error(await res.text());
         layer.clearLayers();
         statsBar.classList.add('hidden');
@@ -464,6 +640,7 @@
         };
 
         xhr.open("POST", "/upload");
+        xhr.setRequestHeader("Authorization", `Bearer ${activeSeed}`);
         xhr.send(fd);
       });
     }
@@ -490,7 +667,10 @@
 
       toggleMapLoader(true, force ? 'Refreshing tracks…' : 'Loading tracks…');
 
-      const headers = { 'Cache-Control': 'no-cache' };
+      const headers = { 
+        'Cache-Control': 'no-cache',
+        'Authorization': `Bearer ${activeSeed}`
+      };
       if (!force && currentTracksEtag) {
         headers['If-None-Match'] = currentTracksEtag;
       }
@@ -591,5 +771,31 @@
       feather.replace();
       });
       </script>
+
+      <!-- Vault Settings Modal -->
+      <div id="settingsModal" class="hidden fixed inset-0 z-[10001] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-gray-800 border border-gray-700 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-bold flex items-center"><i data-feather="shield" class="mr-2 text-green-400"></i> Vault Settings</h3>
+            <button id="closeSettingsBtn" class="text-gray-500 hover:text-white transition"><i data-feather="x"></i></button>
+          </div>
+          
+          <div class="space-y-6">
+            <div>
+              <p class="text-xs text-gray-400 uppercase tracking-widest mb-2">Secret Key (Backup)</p>
+              <div class="bg-gray-900 border border-gray-700 rounded-xl p-3 font-mono text-sm text-green-400 break-words select-all cursor-pointer" id="settingsSeedText" title="Click to copy"></div>
+              <p class="text-[10px] text-gray-500 mt-2">Click the box to copy your key. Save it securely to access your vault from other devices.</p>
+            </div>
+
+            <div class="border-t border-gray-700 pt-6">
+              <p class="text-xs text-red-400 uppercase tracking-widest mb-2 font-bold">Danger Zone</p>
+              <button id="deleteAccountBtn" class="w-full bg-red-900/20 hover:bg-red-900/40 text-red-400 border border-red-900/50 font-bold py-3 rounded-xl transition flex items-center justify-center">
+                <i data-feather="user-x" class="mr-2 w-4 h-4"></i> Delete Vault & All Data
+              </button>
+              <p class="text-[10px] text-gray-500 mt-2 leading-tight">This will permanently wipe all your tracks from our database. This cannot be undone.</p>
+            </div>
+          </div>
+        </div>
+      </div>
       </body>
       </html>
