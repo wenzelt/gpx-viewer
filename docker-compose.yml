@@ -25,6 +25,7 @@ services:
     restart: unless-stopped
     environment:
       DB_DSN: postgresql+psycopg2://${POSTGRES_USER:-gpx}:${POSTGRES_PASSWORD:-gpxpassword}@db:5432/${POSTGRES_DB:-gpxdb}
+      APP_SECRET_PEPPER: ${APP_SECRET_PEPPER}
       UVICORN_HOST: 0.0.0.0
       UVICORN_PORT: 8000
       MAX_UPLOAD_MB: "50"
