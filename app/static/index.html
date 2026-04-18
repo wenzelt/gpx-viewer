@@ -10,10 +10,10 @@
   <!-- Preconnect to essential origins only -->
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://unpkg.com">
-  <link rel="preconnect" href="https://a.tile.openstreetmap.org">
+  <link rel="preconnect" href="https://a.basemaps.cartocdn.com">
 
   <!-- Preload LCP map tile and fonts with high priority -->
-  <link rel="preload" href="https://a.tile.openstreetmap.org/1/0/0.png" as="image" fetchpriority="high">
+  <link rel="preload" href="https://a.basemaps.cartocdn.com/rastertiles/voyager/1/0/0.png" as="image" fetchpriority="high">
   
   <!-- Stylesheets -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" media="print" onload="this.media='all'"/>
@@ -393,9 +393,10 @@
 
     // ── Initialize map ──────────────────────────────────────────
     const map = L.map('map', { worldCopyJump: true }).setView([20, 0], 2);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
-      attribution: '&copy; OpenStreetMap'
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd'
     }).addTo(map);
 
     const colors = {

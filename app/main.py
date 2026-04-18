@@ -120,7 +120,7 @@ async def add_security_headers(request: Request, call_next: Callable[[Request], 
         "script-src 'self' 'unsafe-inline' unpkg.com; "
         "style-src 'self' 'unsafe-inline' unpkg.com fonts.googleapis.com api.fontshare.com; "
         "font-src 'self' fonts.gstatic.com api.fontshare.com; "
-        "img-src 'self' data: *.tile.openstreetmap.org unpkg.com user-gen-media-assets.s3.amazonaws.com; "
+        "img-src 'self' data: *.basemaps.cartocdn.com unpkg.com user-gen-media-assets.s3.amazonaws.com; "
         "connect-src 'self';"
     )
     response.headers["Content-Security-Policy"] = csp
