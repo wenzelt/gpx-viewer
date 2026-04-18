@@ -12,6 +12,7 @@ dependencies = [
     "shapely==2.0.6",
     "gpxpy==1.6.2",
     "python-multipart==0.0.9",
+    "slowapi>=0.1.9",
 ]
 
 [dependency-groups]

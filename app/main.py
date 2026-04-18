@@ -9,16 +9,17 @@ import hashlib
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Callable, Any
+from typing import Literal, Callable, Any, List, Annotated
 from collections.abc import Iterable
 from threading import Lock
 from pathlib import Path
 
 import gpxpy
 import sqlalchemy
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.encoders import jsonable_encoder
 from geoalchemy2.shape import from_shape, to_shape
@@ -28,8 +29,13 @@ from shapely.ops import linemerge
 from sqlalchemy import select, exists, delete, or_, update as sa_update
 from sqlalchemy.orm import Session
 
+# Rate limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 from db import SessionLocal, init_db
-from models import Track
+from models import Track, User
 
 # ------------------------------------------------------------------------------
 # Settings
@@ -42,13 +48,32 @@ CORS_ALLOW_CREDENTIALS: bool = os.environ.get(
 ).strip().lower() in {"1", "true", "yes", "on"}
 TRACKS_PAGE_MAX: int = int(os.environ.get("TRACKS_PAGE_MAX", "1000"))
 GEOM_SIMPLIFY_TOLERANCE: float = float(os.environ.get("GEOM_SIMPLIFY_TOLERANCE", "0.0001"))
+# Server-side salt to prevent rainbow table attacks on seed phrase hashes
+APP_SECRET_PEPPER: str = os.environ.get("APP_SECRET_PEPPER", "change-me-in-production-for-security")
+
 APP_TITLE = "Local GPX Viewer"
-APP_VERSION = "1.1"
+APP_VERSION = "1.3"
 
 # ------------------------------------------------------------------------------
 # App & Middleware
 # ------------------------------------------------------------------------------
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title=APP_TITLE, version=APP_VERSION)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+security = HTTPBearer()
+
+def get_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    seed_phrase = credentials.credentials
+    if not seed_phrase:
+        raise HTTPException(status_code=401, detail="Invalid or missing seed phrase")
+    
+    # Secure deterministic hash: seed_phrase + server_side_pepper
+    hasher = hashlib.sha256()
+    hasher.update(seed_phrase.strip().lower().encode())
+    hasher.update(APP_SECRET_PEPPER.encode())
+    return hasher.hexdigest()
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -67,6 +92,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Hardening Middleware: Security Headers
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next: Callable[[Request], Any]):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    # Content Security Policy - restricts where scripts/styles can come from
+    # and prevents inline scripts unless explicitly allowed.
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' unpkg.com; "
+        "style-src 'self' 'unsafe-inline' unpkg.com fonts.googleapis.com api.fontshare.com; "
+        "font-src 'self' fonts.gstatic.com api.fontshare.com; "
+        "img-src 'self' data: *.tile.openstreetmap.org unpkg.com user-gen-media-assets.s3.amazonaws.com; "
+        "connect-src 'self';"
+    )
+    response.headers["Content-Security-Policy"] = csp
+    return response
+
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -75,25 +121,38 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 class TracksCache:
     def __init__(self) -> None:
         self._lock = Lock()
-        self._serialized_data: bytes | None = None
-        self._etag: str | None = None
-        self._version: int = 1
+        self._cache: dict[str, dict[str, Any]] = {}
 
-    def invalidate(self) -> None:
-        with self._lock:
-            self._version += 1
-            self._serialized_data = None
-            self._etag = None
+    def _get_user_state(self, user_id: str) -> dict[str, Any]:
+        if user_id not in self._cache:
+            self._cache[user_id] = {
+                "serialized_data": None,
+                "etag": None,
+                "version": 1
+            }
+        return self._cache[user_id]
 
-    def get_response(self, loader: Callable[[], tuple[bytes, str]]) -> Response:
+    def invalidate(self, user_id: str) -> None:
         with self._lock:
-            if self._serialized_data is None:
-                self._serialized_data, self._etag = loader()
+            state = self._get_user_state(user_id)
+            state["version"] += 1
+            state["serialized_data"] = None
+            state["etag"] = None
+
+    def get_version(self, user_id: str) -> int:
+        with self._lock:
+            return self._get_user_state(user_id)["version"]
+
+    def get_response(self, user_id: str, loader: Callable[[], tuple[bytes, str]]) -> Response:
+        with self._lock:
+            state = self._get_user_state(user_id)
+            if state["serialized_data"] is None:
+                state["serialized_data"], state["etag"] = loader()
 
             return Response(
-                content=self._serialized_data,
+                content=state["serialized_data"],
                 media_type="application/json",
-                headers={"ETag": self._etag, "Cache-Control": "no-cache"},
+                headers={"ETag": state["etag"], "Cache-Control": "no-cache"},
             )
 
 
@@ -197,8 +256,8 @@ def _track_name(gpx: gpxpy.gpx.GPX) -> str | None:
         return None
 
 
-def _is_duplicate_hash(db: Session, file_hash: str) -> bool:
-    stmt = select(exists().where(Track.hash == file_hash))
+def _is_duplicate_hash(db: Session, file_hash: str, user_id: str) -> bool:
+    stmt = select(exists().where(Track.hash == file_hash).where(Track.user_id == user_id))
     return bool(db.execute(stmt).scalar())
 
 
@@ -242,6 +301,7 @@ async def _process_upload_file(
     upload_file: UploadFile,
     db: Session,
     seen_hashes: set[str],
+    user_id: str,
 ) -> UploadOutcome:
     filename = upload_file.filename or "unknown.gpx"
 
@@ -262,7 +322,7 @@ async def _process_upload_file(
         logger.info("%s skipped (duplicate in request)", filename)
         return UploadOutcome(filename, "skipped", "Duplicate track (request)")
 
-    if _is_duplicate_hash(db, file_hash):
+    if _is_duplicate_hash(db, file_hash, user_id):
         logger.info("%s skipped (duplicate)", filename)
         return UploadOutcome(filename, "skipped", "Duplicate track")
 
@@ -296,6 +356,7 @@ async def _process_upload_file(
             geom=from_shape(mls, srid=4326),
             total_distance_m=total_distance_m,
             total_elevation_gain_m=total_uphill_m,
+            user_id=user_id,
         )
         db.add(track)
     except Exception:
@@ -320,19 +381,30 @@ def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
-@app.post("/upload")
+@app.post("/upload", response_model=None)
+@limiter.limit("20/minute")
 async def upload_gpx(
-    files: list[UploadFile] = File(...),
-) -> dict[str, list[dict[str, str]]]:
+    request: Request,
+    files: Annotated[List[UploadFile], File(...)],
+    user_id: str = Depends(get_user_id),
+) -> Any:
     """Upload one or more GPX files and store them in PostGIS."""
 
     outcomes: list[UploadOutcome] = []
     seen_hashes: set[str] = set()
 
     with SessionLocal() as db:
+        # Implicitly ensure user exists
+        user = db.get(User, user_id)
+        if not user:
+            user = User(id=user_id)
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
         for upload_file in files:
             logger.info("📂 Upload received: %s", upload_file.filename or "unknown.gpx")
-            outcome = await _process_upload_file(upload_file, db, seen_hashes)
+            outcome = await _process_upload_file(upload_file, db, seen_hashes, user_id)
             outcomes.append(outcome)
 
         try:
@@ -352,13 +424,15 @@ async def upload_gpx(
             )
         else:
             if any(outcome.status == "ok" for outcome in outcomes):
-                tracks_cache.invalidate()
+                tracks_cache.invalidate(user_id)
 
     return {"results": [outcome.as_dict() for outcome in outcomes]}
 
 
 def _build_tracks_serialized(
-    limit: int | None = None, offset: int = 0
+    user_id: str,
+    limit: int | None = None,
+    offset: int = 0
 ) -> bytes:
     features: list[dict[str, Any]] = []
     stmt = (
@@ -372,6 +446,7 @@ def _build_tracks_serialized(
             Track.total_distance_m,
             Track.total_elevation_gain_m,
         )
+        .where(Track.user_id == user_id)
         .order_by(Track.id)
         .offset(offset)
     )
@@ -420,28 +495,31 @@ def _build_tracks_serialized(
 
 
 @app.get("/tracks")
+@limiter.limit("60/minute")
 def get_tracks(
     request: Request,
     limit: int | None = Query(default=None, ge=1, le=TRACKS_PAGE_MAX),
     offset: int = Query(default=0, ge=0),
+    user_id: str = Depends(get_user_id),
 ) -> Response:
     """Return all tracks as a GeoJSON FeatureCollection."""
 
     is_default_query = limit is None and offset == 0
     if is_default_query:
         # Check ETag before loading/serializing
-        etag = str(tracks_cache._version)
+        etag = str(tracks_cache.get_version(user_id))
         if request.headers.get("if-none-match") == etag:
             return Response(
                 status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"}
             )
         
         return tracks_cache.get_response(
-            lambda: (_build_tracks_serialized(), etag)
+            user_id,
+            lambda: (_build_tracks_serialized(user_id), etag)
         )
 
     # For non-default queries, we don't cache but still provide a deterministic ETag
-    serialized = _build_tracks_serialized(limit=limit, offset=offset)
+    serialized = _build_tracks_serialized(user_id, limit=limit, offset=offset)
     etag = compute_sha256(serialized)
 
     if request.headers.get("if-none-match") == etag:
@@ -457,11 +535,38 @@ def get_tracks(
 
 
 @app.delete("/delete_all")
-def delete_all_tracks() -> dict[str, int | str]:
+@limiter.limit("5/minute")
+def delete_all_tracks(request: Request, user_id: str = Depends(get_user_id)) -> dict[str, int | str]:
     with SessionLocal() as db:
-        result = db.execute(delete(Track))
+        result = db.execute(delete(Track).where(Track.user_id == user_id))
         rowcount = result.rowcount
         deleted_count = rowcount if rowcount is not None and rowcount >= 0 else 0
         db.commit()
-    tracks_cache.invalidate()
+    tracks_cache.invalidate(user_id)
     return {"status": "ok", "deleted": deleted_count}
+
+
+@app.post("/auth/create")
+@limiter.limit("10/minute")
+def create_vault(request: Request, user_id: str = Depends(get_user_id)) -> dict[str, str]:
+    """Explicitly initialize a new vault/user."""
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        if not user:
+            user = User(id=user_id)
+            db.add(user)
+            db.commit()
+    return {"status": "ok", "user_id": user_id}
+
+
+@app.delete("/account")
+@limiter.limit("5/minute")
+def delete_account(request: Request, user_id: str = Depends(get_user_id)) -> dict[str, str]:
+    """Delete the entire account and all associated tracks."""
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        if user:
+            db.delete(user)
+            db.commit()
+    tracks_cache.invalidate(user_id)
+    return {"status": "ok"}
