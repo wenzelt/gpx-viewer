@@ -401,12 +401,14 @@ def index() -> FileResponse:
 @limiter.limit("1000/minute")
 async def upload_gpx(
     request: Request,
-    files: List = File(...),
+    files = File(...),
     user_id: str = Depends(get_user_id),
 ):
-
     """Upload one or more GPX files and store them in PostGIS."""
-    if len(files) > MAX_FILES_PER_REQUEST:
+    # Cast to ensure we have a list of UploadFile objects
+    upload_files: List[UploadFile] = files # type: ignore
+    
+    if len(upload_files) > MAX_FILES_PER_REQUEST:
         raise HTTPException(
             status_code=400,
             detail=f"Too many files (max {MAX_FILES_PER_REQUEST} per request)",
@@ -424,7 +426,7 @@ async def upload_gpx(
             db.commit()
             db.refresh(user)
 
-        for upload_file in files:
+        for upload_file in upload_files:
             logger.info("📂 Upload received: %s", upload_file.filename or "unknown.gpx")
             outcome = await _process_upload_file(upload_file, db, seen_hashes, user_id)
             outcomes.append(outcome)
