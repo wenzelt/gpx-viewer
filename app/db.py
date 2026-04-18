@@ -80,6 +80,9 @@ def _migrate_add_user_isolation(eng=None) -> None:
             if not res.fetchone():
                 conn.execute(text("ALTER TABLE tracks ADD CONSTRAINT uq_user_track_hash UNIQUE (user_id, hash)"))
 
+            # Add index on user_id for performance
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tracks_user_id ON tracks (user_id)"))
+
         elif conn.dialect.name == "sqlite":
             existing = {row[1] for row in conn.execute(text("PRAGMA table_info(tracks)"))}
             if "user_id" not in existing:
@@ -94,6 +97,9 @@ def _migrate_add_user_isolation(eng=None) -> None:
                     text("UPDATE tracks SET user_id = :uid WHERE user_id IS NULL"),
                     {"uid": legacy_user_id},
                 )
+            
+            # Ensure index exists on SQLite too
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tracks_user_id ON tracks (user_id)"))
 
 def init_db() -> None:
     # Ensure PostGIS extension exists when running against PostgreSQL
