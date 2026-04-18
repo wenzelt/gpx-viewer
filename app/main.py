@@ -405,9 +405,8 @@ async def upload_gpx(
     user_id: str = Depends(get_user_id),
 ):
     """Upload one or more GPX files and store them in PostGIS."""
-    # Cast to ensure we have a list of UploadFile objects
-    upload_files: List[UploadFile] = files # type: ignore
-    
+    upload_files: list[UploadFile] = files if isinstance(files, list) else [files]
+
     if len(upload_files) > MAX_FILES_PER_REQUEST:
         raise HTTPException(
             status_code=400,
