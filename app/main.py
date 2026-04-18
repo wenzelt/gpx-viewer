@@ -11,7 +11,7 @@ from collections import OrderedDict
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Literal, Callable, Any, Annotated
+from typing import Literal, Callable, Any, Annotated, List
 from collections.abc import Iterable
 from threading import Lock
 from pathlib import Path
@@ -398,12 +398,13 @@ def index() -> FileResponse:
 
 
 @app.post("/upload", response_model=None)
-@limiter.limit("20/minute")
+@limiter.limit("1000/minute")
 async def upload_gpx(
     request: Request,
-    files: Annotated[list[UploadFile], File(...)],
+    files: List = File(...),
     user_id: str = Depends(get_user_id),
-) -> Any:
+):
+
     """Upload one or more GPX files and store them in PostGIS."""
     if len(files) > MAX_FILES_PER_REQUEST:
         raise HTTPException(
@@ -514,7 +515,7 @@ def _build_tracks_serialized(
 
 
 @app.get("/tracks")
-@limiter.limit("60/minute")
+@limiter.limit("1000/minute")
 def get_tracks(
     request: Request,
     limit: int | None = Query(default=None, ge=1, le=TRACKS_PAGE_MAX),
@@ -554,7 +555,7 @@ def get_tracks(
 
 
 @app.delete("/delete_all")
-@limiter.limit("5/minute")
+@limiter.limit("50/minute")
 def delete_all_tracks(request: Request, user_id: str = Depends(get_user_id)) -> dict[str, int | str]:
     with SessionLocal() as db:
         result = db.execute(delete(Track).where(Track.user_id == user_id))
@@ -566,7 +567,7 @@ def delete_all_tracks(request: Request, user_id: str = Depends(get_user_id)) -> 
 
 
 @app.post("/auth/create")
-@limiter.limit("10/minute")
+@limiter.limit("100/minute")
 def create_vault(request: Request, user_id: str = Depends(get_user_id)) -> dict[str, str]:
     """Explicitly initialize a new vault/user."""
     with SessionLocal() as db:
@@ -579,7 +580,7 @@ def create_vault(request: Request, user_id: str = Depends(get_user_id)) -> dict[
 
 
 @app.delete("/account")
-@limiter.limit("5/minute")
+@limiter.limit("50/minute")
 def delete_account(request: Request, user_id: str = Depends(get_user_id)) -> dict[str, str]:
     """Delete the entire account and all associated tracks."""
     with SessionLocal() as db:
