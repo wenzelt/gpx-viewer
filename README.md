@@ -37,12 +37,18 @@ Upload, analyze, and manage your outdoor adventures through a seamless web inter
    cd trailblaze-gpx-viewer
    ```
 
-2. **Launch Services**:
+2. **Configure Environment**:
+   Copy the example environment file and adjust the values if needed:
+   ```bash
+   cp .env.example .env
+   ```
+
+3. **Launch Services**:
    ```bash
    docker compose up --build
    ```
 
-3. **Explore**:
+4. **Explore**:
    Open [**http://localhost:8008**](http://localhost:8008) in your browser.
 
 ## 📖 How It Works
