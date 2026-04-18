@@ -87,6 +87,14 @@ Environment variables can be tuned in `.env`:
 | `GEOM_SIMPLIFY_TOLERANCE` | `0.0001` | RDP simplification threshold (approx. 11m) |
 | `DB_DSN` | *(derived)* | PostGIS connection string |
 
+## 🗺️ Roadmap
+
+- [x] **Delete tracks from the UI**: "Delete All" button implemented.
+- [x] **Store GPX metadata**: Activity type (via tagging), distance, and elevation gain.
+- [x] **Geometry simplification**: On-the-fly RDP simplification for high-performance rendering.
+- [ ] **Authentication**: Add OIDC or simple auth if exposing the service publicly.
+- [ ] **Individual Track Deletion**: Allow deleting single tracks directly from the map or a list.
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
