@@ -37,8 +37,8 @@ Upload, analyze, and manage your outdoor adventures through a seamless web inter
    cd trailblaze-gpx-viewer
    ```
 
-2. **Configure Environment**:
-   Copy the example environment file and adjust the values if needed:
+2. **Configure Environment (Optional)**:
+   For local development, the app works out-of-the-box with default values. To customize them, copy the example file:
    ```bash
    cp .env.example .env
    ```
