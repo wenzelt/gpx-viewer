@@ -49,7 +49,7 @@ CORS_ALLOW_CREDENTIALS: bool = os.environ.get(
     "ALLOW_CREDENTIALS", "false"
 ).strip().lower() in {"1", "true", "yes", "on"}
 TRACKS_PAGE_MAX: int = int(os.environ.get("TRACKS_PAGE_MAX", "1000"))
-GEOM_SIMPLIFY_TOLERANCE: float = float(os.environ.get("GEOM_SIMPLIFY_TOLERANCE", "0.0001"))
+GEOM_SIMPLIFY_TOLERANCE: float = float(os.environ.get("GEOM_SIMPLIFY_TOLERANCE", "0.00002"))
 # Server-side salt to prevent rainbow table attacks on seed phrase hashes.
 # Must be set via environment variable — no insecure default allowed.
 APP_SECRET_PEPPER: str = os.environ["APP_SECRET_PEPPER"]
