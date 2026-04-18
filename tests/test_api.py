@@ -3,13 +3,13 @@ from __future__ import annotations
 import asyncio
 import io
 from types import SimpleNamespace
-from typing import List
+from typing import List, Any
 
-from fastapi import UploadFile
+from fastapi import UploadFile, Response
 from starlette.requests import Request
 
 import main
-from main import UploadOutcome, _downsample_points, delete_all_tracks, get_tracks, health, upload_gpx
+from main import UploadOutcome, delete_all_tracks, get_tracks, health, upload_gpx
 
 
 class DummySession:
@@ -46,60 +46,6 @@ def _upload_file(name: str) -> UploadFile:
 def _make_point(lon: float, lat: float):
     """Minimal stand-in for a gpxpy TrackPoint."""
     return SimpleNamespace(longitude=lon, latitude=lat)
-
-
-# ── _downsample_points ────────────────────────────────────────────────────────
-
-def test_downsample_empty_list_returns_empty():
-    assert _downsample_points([]) == []
-
-
-def test_downsample_single_point_returned_unchanged():
-    pt = _make_point(0, 0)
-    assert _downsample_points([pt]) == [pt]
-
-
-def test_downsample_keeps_ten_percent_deterministically():
-    pts = [_make_point(float(i), 0.0) for i in range(100)]
-    result = _downsample_points(pts, sample_percent=10)
-    assert result == [
-        pts[0],
-        pts[1],
-        pts[13],
-        pts[25],
-        pts[37],
-        pts[50],
-        pts[62],
-        pts[74],
-        pts[86],
-        pts[99],
-    ]
-
-
-def test_downsample_preserves_endpoints():
-    pts = [_make_point(float(i), 0.0) for i in range(25)]
-    result = _downsample_points(pts, sample_percent=10)
-    assert result[0] is pts[0]
-    assert result[-1] is pts[-1]
-
-
-def test_downsample_small_track_returns_endpoints_when_ten_percent_is_too_small():
-    pts = [_make_point(float(i), 0.0) for i in range(5)]
-    result = _downsample_points(pts, sample_percent=10)
-    assert result == [pts[0], pts[-1]]
-
-
-def test_downsample_preserves_two_point_track():
-    pts = [_make_point(0, 0), _make_point(1, 1)]
-    result = _downsample_points(pts, sample_percent=10)
-    assert result[0] is pts[0]
-    assert result[-1] is pts[-1]
-
-
-def test_downsample_clamps_sampling_percent():
-    pts = [_make_point(float(i), 0.0) for i in range(20)]
-    assert _downsample_points(pts, sample_percent=0) == [pts[0], pts[-1]]
-    assert _downsample_points(pts, sample_percent=200) == pts
 
 
 # ── existing API tests ────────────────────────────────────────────────────────
@@ -161,15 +107,18 @@ def test_upload_gpx_integrity_error_converts_to_skip(monkeypatch):
 
 
 def test_get_tracks_uses_cache_headers(monkeypatch):
-    payload = {"type": "FeatureCollection", "features": []}
-    etag = "abc123"
-    monkeypatch.setattr(main.tracks_cache, "get_payload", lambda loader: (payload, etag))
+    serialized = b'{"type": "FeatureCollection", "features": []}'
+    monkeypatch.setattr(main, "_build_tracks_serialized", lambda **kwargs: serialized)
 
-    response = get_tracks(Request({"type": "http", "headers": []}))
+    # Calculate expected etag for non-default query path
+    etag = main.compute_sha256(serialized)
+
+    # Use a non-default query to bypass tracks_cache._version based ETag
+    response = get_tracks(Request({"type": "http", "headers": []}), limit=100)
     assert response.status_code == 200
     assert response.headers["ETag"] == etag
 
-    response_304 = get_tracks(Request({"type": "http", "headers": [(b"if-none-match", etag.encode())]}))
+    response_304 = get_tracks(Request({"type": "http", "headers": [(b"if-none-match", etag.encode())]}), limit=100)
     assert response_304.status_code == 304
     assert response_304.headers["ETag"] == etag
 
