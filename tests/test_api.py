@@ -1,22 +1,31 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import hashlib
+import io
+import os
 from types import SimpleNamespace
-from typing import List, Any
+from typing import Any
 
-from fastapi import UploadFile, Response
+import pytest
+from fastapi import HTTPException, UploadFile, Response
+from fastapi.security import HTTPAuthorizationCredentials
 from starlette.requests import Request
 
 import main
-from main import UploadOutcome, delete_all_tracks, get_tracks, health, upload_gpx
+from main import UploadOutcome, delete_all_tracks, get_tracks, get_user_id, health, upload_gpx
 from models import User
 
-TEST_USER_ID = hashlib.sha256(b"test-seed-phrase").hexdigest()
+# Compute TEST_USER_ID the same way get_user_id does, using the test pepper set in conftest.py
+_TEST_SEED = "test-seed-phrase"
+_TEST_PEPPER = os.environ["APP_SECRET_PEPPER"]
+_hasher = hashlib.sha256()
+_hasher.update(_TEST_SEED.strip().lower().encode())
+_hasher.update(_TEST_PEPPER.encode())
+TEST_USER_ID = _hasher.hexdigest()
 
 class DummySession:
-    def __init__(self, outcomes: List[UploadOutcome] | None = None, rowcount: int = 0):
+    def __init__(self, outcomes: list[UploadOutcome] | None = None, rowcount: int = 0):
         self.added: list = []
         self.outcomes = outcomes or []
         self.rowcount = rowcount
@@ -152,6 +161,40 @@ def test_get_tracks_uses_cache_headers(monkeypatch):
     assert response_304.status_code == 304
     assert response_304.headers["ETag"] == etag
 
+
+# ── get_user_id unit tests ────────────────────────────────────────────────────
+
+def _creds(seed: str) -> HTTPAuthorizationCredentials:
+    return HTTPAuthorizationCredentials(scheme="Bearer", credentials=seed)
+
+
+def test_get_user_id_returns_hex_digest() -> None:
+    result = get_user_id(_creds("long-enough-seed-phrase"))
+    assert len(result) == 64
+    assert all(c in "0123456789abcdef" for c in result)
+
+
+def test_get_user_id_is_deterministic() -> None:
+    assert get_user_id(_creds("my-seed-phrase-here")) == get_user_id(_creds("my-seed-phrase-here"))
+
+
+def test_get_user_id_case_insensitive() -> None:
+    assert get_user_id(_creds("My-Seed-Phrase-HERE")) == get_user_id(_creds("my-seed-phrase-here"))
+
+
+def test_get_user_id_too_short_raises_401() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        get_user_id(_creds("short"))
+    assert exc_info.value.status_code == 401
+
+
+def test_get_user_id_exactly_min_length_accepted() -> None:
+    seed = "a" * main.MIN_SEED_PHRASE_LEN
+    result = get_user_id(_creds(seed))
+    assert len(result) == 64
+
+
+# ── delete_all_tracks ────────────────────────────────────────────────────────
 
 def test_delete_all_tracks_invalidates_cache(monkeypatch):
     session = DummySession(rowcount=3)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from geoalchemy2 import Geometry
@@ -13,12 +13,13 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)  # Hashed seed phrase
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     tracks: Mapped[list[Track]] = relationship("Track", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"User(id={self.id!r}, created_at={self.created_at!r})"
+
 
 class Track(Base):
     __tablename__ = "tracks"
@@ -30,7 +31,7 @@ class Track(Base):
     tag: Mapped[str | None] = mapped_column(String, nullable=True)
     hash: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str | None] = mapped_column(String, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     total_distance_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     total_elevation_gain_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     # GeoAlchemy Geometry column; typing as Any to keep mypy happy

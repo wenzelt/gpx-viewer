@@ -7,9 +7,11 @@ import time
 import json
 import hashlib
 import logging
+from collections import OrderedDict
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Literal, Callable, Any, List, Annotated
+from datetime import datetime, timezone
+from typing import Literal, Callable, Any, Annotated
 from collections.abc import Iterable
 from threading import Lock
 from pathlib import Path
@@ -18,7 +20,7 @@ import gpxpy
 import sqlalchemy
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
+from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.encoders import jsonable_encoder
@@ -26,7 +28,7 @@ from geoalchemy2.shape import from_shape, to_shape
 from shapely.geometry import LineString, MultiLineString, mapping
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import linemerge
-from sqlalchemy import select, exists, delete, or_, update as sa_update
+from sqlalchemy import select, exists, delete
 from sqlalchemy.orm import Session
 
 # Rate limiting
@@ -48,17 +50,28 @@ CORS_ALLOW_CREDENTIALS: bool = os.environ.get(
 ).strip().lower() in {"1", "true", "yes", "on"}
 TRACKS_PAGE_MAX: int = int(os.environ.get("TRACKS_PAGE_MAX", "1000"))
 GEOM_SIMPLIFY_TOLERANCE: float = float(os.environ.get("GEOM_SIMPLIFY_TOLERANCE", "0.0001"))
-# Server-side salt to prevent rainbow table attacks on seed phrase hashes
-APP_SECRET_PEPPER: str = os.environ.get("APP_SECRET_PEPPER", "change-me-in-production-for-security")
+# Server-side salt to prevent rainbow table attacks on seed phrase hashes.
+# Must be set via environment variable — no insecure default allowed.
+APP_SECRET_PEPPER: str = os.environ["APP_SECRET_PEPPER"]
 
 APP_TITLE = "Local GPX Viewer"
 APP_VERSION = "1.3"
+MAX_FILES_PER_REQUEST: int = 50
+MIN_SEED_PHRASE_LEN: int = 8
 
 # ------------------------------------------------------------------------------
 # App & Middleware
 # ------------------------------------------------------------------------------
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title=APP_TITLE, version=APP_VERSION)
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    init_db_with_retry()
+    yield
+
+
+app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=_lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -66,9 +79,9 @@ security = HTTPBearer()
 
 def get_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
     seed_phrase = credentials.credentials
-    if not seed_phrase:
-        raise HTTPException(status_code=401, detail="Invalid or missing seed phrase")
-    
+    if len(seed_phrase) < MIN_SEED_PHRASE_LEN:
+        raise HTTPException(status_code=401, detail=f"Seed phrase must be at least {MIN_SEED_PHRASE_LEN} characters")
+
     # Secure deterministic hash: seed_phrase + server_side_pepper
     hasher = hashlib.sha256()
     hasher.update(seed_phrase.strip().lower().encode())
@@ -118,18 +131,26 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
+_CACHE_MAX_USERS = 1000
+
+
 class TracksCache:
     def __init__(self) -> None:
         self._lock = Lock()
-        self._cache: dict[str, dict[str, Any]] = {}
+        self._cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
 
     def _get_user_state(self, user_id: str) -> dict[str, Any]:
+        """Return (and create if needed) the cache state for user_id.
+
+        MUST be called with self._lock held.
+        Evicts the least-recently-used entry when the cache is at capacity.
+        """
         if user_id not in self._cache:
-            self._cache[user_id] = {
-                "serialized_data": None,
-                "etag": None,
-                "version": 1
-            }
+            if len(self._cache) >= _CACHE_MAX_USERS:
+                self._cache.popitem(last=False)  # evict LRU
+            self._cache[user_id] = {"serialized_data": None, "etag": None, "version": 1}
+        else:
+            self._cache.move_to_end(user_id)
         return self._cache[user_id]
 
     def invalidate(self, user_id: str) -> None:
@@ -162,11 +183,6 @@ tracks_cache = TracksCache()
 # ------------------------------------------------------------------------------
 # Startup
 # ------------------------------------------------------------------------------
-@app.on_event("startup")
-def _startup() -> None:
-    init_db_with_retry()
-
-
 def init_db_with_retry(max_retries: int = 10, delay: int = 3) -> None:
     for attempt in range(1, max_retries + 1):
         try:
@@ -327,7 +343,7 @@ async def _process_upload_file(
         return UploadOutcome(filename, "skipped", "Duplicate track")
 
     try:
-        gpx = gpxpy.parse(io.StringIO(content.decode("utf-8", errors="ignore")))
+        gpx = gpxpy.parse(io.BytesIO(content))
     except Exception as parse_err:
         logger.error("Failed to parse %s: %s", filename, parse_err)
         return UploadOutcome(filename, "failed", "Invalid GPX")
@@ -373,10 +389,10 @@ async def _process_upload_file(
 # ------------------------------------------------------------------------------
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "time_utc": datetime.utcnow().isoformat()}
+    return {"status": "ok", "time_utc": datetime.now(timezone.utc).isoformat()}
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=FileResponse)
 def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
@@ -385,10 +401,15 @@ def index() -> FileResponse:
 @limiter.limit("20/minute")
 async def upload_gpx(
     request: Request,
-    files: Annotated[List[UploadFile], File(...)],
+    files: Annotated[list[UploadFile], File(...)],
     user_id: str = Depends(get_user_id),
 ) -> Any:
     """Upload one or more GPX files and store them in PostGIS."""
+    if len(files) > MAX_FILES_PER_REQUEST:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many files (max {MAX_FILES_PER_REQUEST} per request)",
+        )
 
     outcomes: list[UploadOutcome] = []
     seen_hashes: set[str] = set()
@@ -416,12 +437,10 @@ async def upload_gpx(
                 if outcome.status == "ok":
                     outcome.status = "skipped"
                     outcome.reason = "Duplicate (constraint)"
-        except Exception as commit_err:
+        except Exception:
             db.rollback()
             logger.exception("❌ DB commit failed")
-            raise HTTPException(
-                status_code=500, detail=f"DB commit failed: {commit_err}"
-            )
+            raise HTTPException(status_code=500, detail="Internal server error")
         else:
             if any(outcome.status == "ok" for outcome in outcomes):
                 tracks_cache.invalidate(user_id)
