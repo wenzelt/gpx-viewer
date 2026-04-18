@@ -50,6 +50,21 @@ Upload, analyze, and manage your outdoor adventures through a seamless web inter
 ### Uploading Tracks
 Simply drag and drop one or more `.gpx` files onto the upload zone. The app performs a SHA-256 hash check to prevent duplicates before computing stats and storing the geometry in PostGIS.
 
+### Activity Categories & Tagging
+TrailBlaze supports automatic activity categorization and color-coding based on your filenames. To categorize a track, name your file using the format `any-name-category.gpx` (e.g., `morning-run-running.gpx`). For categories with multiple words, use an underscore (e.g., `forest-trail-trail_running.gpx`).
+
+Supported categories include:
+
+- **🏃 Endurance**: `running` (Red), `trail_running` (Dark Red), `cycling` (Orange), `mountain_biking` (Dark Orange), `walking` (Brown), `trekking`, `triathlon`.
+- **🌊 Water**: `swimming` (Blue), `open_water_swimming`, `kayaking` (Sky Blue), `canoeing`, `rowing`, `sailing`, `diving`.
+- **🏔️ Mountain**: `hiking` (Green), `mountaineering` (Dark Green), `climbing`, `bouldering`, `skiing_touring`, `cross_country_skiing`.
+- **❄️ Winter**: `alpine_skiing` (Cyan), `snowboarding`, `ice_skating`, `ice_hockey`.
+- **💪 Fitness**: `crossfit` (Purple), `strength_training`, `aerobics`, `hiit`, `gym`.
+- **🧘 Mind & Body**: `yoga` (Gold), `pilates`, `meditation`.
+- **🛠️ Misc**: `chores` (Gray), `other` (Black).
+
+Tracks without a recognized category default to a deep blue color.
+
 ### Efficient Rendering & Performance
 To maintain a smooth 60fps experience even with thousands of tracks, TrailBlaze simplifies geometries on-the-fly when serving the API using the Ramer-Douglas-Peucker algorithm. This removes redundant GPS "noise" while preserving the exact path of your adventure. The frontend is further optimized for low-latency loading by eliminating render-blocking CSS and utilizing `fetchpriority` for critical map assets.
 
