@@ -9,7 +9,7 @@ RUN npm install @tailwindcss/cli
 RUN echo "@import 'tailwindcss';" > input.css
 
 # We need the HTML file to scan for classes
-COPY static/index.html ./static/index.html
+COPY app/static/index.html ./static/index.html
 
 # Run the Tailwind CLI to generate the minified CSS
 RUN ./node_modules/.bin/tailwindcss -i input.css -o ./static/tailwind-dist.css --minify
@@ -27,11 +27,11 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
  && pip install --no-cache-dir uv
 
 # Separate layer for deps
-COPY pyproject.toml .
+COPY app/pyproject.toml .
 RUN uv sync --no-dev --no-install-project
 
 # App code
-COPY . .
+COPY app/ .
 
 # Copy the compiled CSS from the builder stage
 COPY --from=builder /build/static/tailwind-dist.css ./static/tailwind-dist.css
