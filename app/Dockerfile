@@ -46,5 +46,5 @@ USER appuser
 
 EXPOSE 8000
 
-# Uvicorn in-process is fine for this small app
-CMD ["sh", "-c", "uv run uvicorn main:app --host ${UVICORN_HOST:-0.0.0.0} --port ${UVICORN_PORT:-8000}"]
+# Uvicorn in-process is fine for this small app, but we must trust proxy headers for rate limiting on Railway
+CMD ["sh", "-c", "uv run uvicorn main:app --host ${UVICORN_HOST:-0.0.0.0} --port ${UVICORN_PORT:-8000} --proxy-headers --forwarded-allow-ips='*'"]

@@ -18,6 +18,7 @@ from pathlib import Path
 
 import gpxpy
 import sqlalchemy
+import defusedxml.ElementTree as ET
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
@@ -343,10 +344,12 @@ async def _process_upload_file(
         return UploadOutcome(filename, "skipped", "Duplicate track")
 
     try:
+        # Pre-parse with defusedxml to protect against XML Bombs and XXE
+        ET.fromstring(content)
         gpx = gpxpy.parse(io.BytesIO(content))
     except Exception as parse_err:
         logger.error("Failed to parse %s: %s", filename, parse_err)
-        return UploadOutcome(filename, "failed", "Invalid GPX")
+        return UploadOutcome(filename, "failed", "Invalid GPX or unsafe XML")
 
     lines = _lines_from_gpx(gpx)
     if not lines:

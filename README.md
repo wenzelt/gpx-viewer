@@ -52,6 +52,14 @@ Upload, analyze, and manage your outdoor adventures through a seamless web inter
 4. **Explore**:
    Open [**http://localhost:8008**](http://localhost:8008) in your browser.
 
+### Deployment (Railway / Production)
+When exposing TrailBlaze to the public internet (e.g., via Railway or Heroku), you must configure the following environment variables for security:
+
+1. **`APP_SECRET_PEPPER`**: Set this to a long, random string. This acts as a server-side salt to prevent rainbow-table attacks on user seed phrases.
+2. **`ALLOWED_ORIGINS`**: Set this to your exact public URL (e.g., `https://my-gpx-app.up.railway.app`). Do **not** leave this as `*` in production.
+3. **`ALLOW_CREDENTIALS`**: Set to `true` to allow the frontend to send the `Authorization` header securely.
+4. **`UVICORN_FORWARDED_ALLOW_IPS`**: (Handled automatically by the Dockerfile) ensures rate limiting works correctly behind a reverse proxy.
+
 ## 📖 How It Works
 
 ### Uploading Tracks
