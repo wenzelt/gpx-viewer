@@ -21,7 +21,8 @@ services:
 
   app:
     build:
-      context: ./app
+      context: .
+      dockerfile: app/Dockerfile
     container_name: gpx_app
     restart: unless-stopped
     environment:
