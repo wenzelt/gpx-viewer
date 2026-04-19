@@ -638,23 +638,25 @@ footer {
   <div class="hero-grid-bg"></div>
   <div class="hero-content">
     <div class="hero-text">
-      <div class="hero-badge"><span class="hero-badge-dot"></span> Open Source · MIT License</div>
-      <h1 class="hero-title">Your GPS tracks<br>on a <span class="accent">living map</span></h1>
-      <p class="hero-sub">Upload GPX files from any device. Instantly visualize every hike, ride, and run on a beautiful OpenStreetMap. Self-hosted, Docker-powered, yours forever.</p>
+      <div class="hero-badge"><span class="hero-badge-dot"></span> Live Demo · 30 Days · Open Source</div>
+      <h1 class="hero-title">Your GPS tracks.<br>Your <span class="accent">private vault</span>.</h1>
+      <p class="hero-sub">No email. No password. Just a secret key only you hold. Upload your GPX files, visualize every trail on a world map, and own your data completely. Self-hosted or try the live demo — no account ever required.</p>
       <div class="hero-actions">
-        <a href="#install" class="btn btn-primary" style="font-size:var(--text-base);padding:var(--space-4) var(--space-6);">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M4 8l8-4 8 4M4 8v8M20 8v8M12 4v8"/></svg>
-          Docker Deploy
+        <a href="https://trailblaze.up.railway.app" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="font-size:var(--text-base);padding:var(--space-4) var(--space-6);">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          Try Live Demo
         </a>
-        <a href="https://github.com/wenzelt/trailblaze-gpx-viewer" target="_blank" rel="noopener noreferrer" class="btn btn-ghost" style="font-size:var(--text-base);padding:var(--space-4) var(--space-6);">
-          View on GitHub
+        <a href="#install" class="btn btn-ghost" style="font-size:var(--text-base);padding:var(--space-4) var(--space-6);">
+          Self-host with Docker
         </a>
       </div>
       <div class="hero-stack-badges">
+        <span class="stack-badge">🔑 Privacy by Design</span>
         <span class="stack-badge">🐳 Docker</span>
         <span class="stack-badge">⚡ FastAPI</span>
         <span class="stack-badge">🗺️ Leaflet.js</span>
         <span class="stack-badge">🐘 PostGIS</span>
+        <span class="stack-badge">🇪🇺 GDPR Art. 20</span>
       </div>
     </div>
 
@@ -690,8 +692,12 @@ footer {
 <!-- MARQUEE STRIP -->
 <div class="features-strip">
   <div class="strip-track">
+    <span class="strip-item"><span class="strip-dot"></span> Privacy by Design vault</span>
+    <span class="strip-item"><span class="strip-dot"></span> No email · no password · no account</span>
     <span class="strip-item"><span class="strip-dot"></span> Drag &amp; drop GPX upload</span>
+    <span class="strip-item"><span class="strip-dot"></span> GDPR Art. 20 data portability</span>
     <span class="strip-item"><span class="strip-dot"></span> Multi-file batch processing</span>
+    <span class="strip-item"><span class="strip-dot"></span> Salted secret key hashing</span>
     <span class="strip-item"><span class="strip-dot"></span> OpenStreetMap world map</span>
     <span class="strip-item"><span class="strip-dot"></span> PostGIS spatial indexing</span>
     <span class="strip-item"><span class="strip-dot"></span> Docker Compose setup</span>
@@ -699,8 +705,12 @@ footer {
     <span class="strip-item"><span class="strip-dot"></span> FastAPI REST endpoints</span>
     <span class="strip-item"><span class="strip-dot"></span> Apple Silicon ready</span>
     <!-- Duplicate for seamless loop -->
+    <span class="strip-item"><span class="strip-dot"></span> Privacy by Design vault</span>
+    <span class="strip-item"><span class="strip-dot"></span> No email · no password · no account</span>
     <span class="strip-item"><span class="strip-dot"></span> Drag &amp; drop GPX upload</span>
+    <span class="strip-item"><span class="strip-dot"></span> GDPR Art. 20 data portability</span>
     <span class="strip-item"><span class="strip-dot"></span> Multi-file batch processing</span>
+    <span class="strip-item"><span class="strip-dot"></span> Salted secret key hashing</span>
     <span class="strip-item"><span class="strip-dot"></span> OpenStreetMap world map</span>
     <span class="strip-item"><span class="strip-dot"></span> PostGIS spatial indexing</span>
     <span class="strip-item"><span class="strip-dot"></span> Docker Compose setup</span>
@@ -718,11 +728,16 @@ footer {
       <div class="demo-banner-overlay">
         <div class="demo-banner-text">
           <h2>Every trail,<br>one canvas</h2>
-          <p>From a morning run in Munich to a multi-day alpine traverse. All your GPX tracks, beautifully rendered on a single world map.</p>
-          <a href="#install" class="btn btn-primary" style="font-size:var(--text-base);padding:var(--space-4) var(--space-6);">
-            Try it locally
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          </a>
+          <p>From a morning run in Munich to a multi-day alpine traverse. All your GPX tracks, beautifully rendered — and no one else can see them but you.</p>
+          <div style="display:flex;gap:var(--space-3);flex-wrap:wrap;">
+            <a href="https://trailblaze.up.railway.app" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="font-size:var(--text-base);padding:var(--space-4) var(--space-6);">
+              Try Live Demo
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </a>
+            <a href="#install" class="btn btn-ghost" style="font-size:var(--text-base);padding:var(--space-4) var(--space-6);background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2);color:#fff;">
+              Self-host
+            </a>
+          </div>
         </div>
       </div>
     </div>
@@ -764,15 +779,15 @@ footer {
       </div>
 
       <div class="feature-card fade-in fade-in-delay-2">
-        <div class="feature-icon">🔄</div>
-        <h3 class="feature-title">Survives Restarts</h3>
-        <p class="feature-desc">Data lives in Docker volumes. Bounce the containers, update the code — your tracks are always there when you come back.</p>
+        <div class="feature-icon">🔑</div>
+        <h3 class="feature-title">Privacy by Design Vault</h3>
+        <p class="feature-desc">No email. No password. No account. You generate a five-word secret key that lives only in your browser. On the server, only a salted SHA-256 hash is stored — making it impossible to link data back to any individual, even for the operator.</p>
       </div>
 
       <div class="feature-card fade-in">
-        <div class="feature-icon">⚡</div>
-        <h3 class="feature-title">REST API Included</h3>
-        <p class="feature-desc">Upload via curl, fetch GeoJSON, health check — all endpoints documented. Integrate TrailBlaze into your own scripts and workflows.</p>
+        <div class="feature-icon">🇪🇺</div>
+        <h3 class="feature-title">GDPR Export Workflow</h3>
+        <p class="feature-desc">Under GDPR Article 20, your sports watch manufacturer must hand over all your activity data on request. Request your export monthly, drop the GPX files into TrailBlaze, and your adventure map stays up to date — no third-party platform ever needed.</p>
       </div>
 
       <div class="feature-card fade-in fade-in-delay-1">
@@ -795,29 +810,29 @@ footer {
         <div class="how-step active" data-step="0">
           <div class="step-num">01</div>
           <div class="step-content">
-            <div class="step-title">Clone &amp; start</div>
-            <div class="step-desc">Clone the repo and run <code style="font-family:var(--font-mono);font-size:var(--text-xs)">docker compose up --build</code>. FastAPI, PostGIS, and the Leaflet frontend spin up automatically at localhost:8000.</div>
+            <div class="step-title">Create your vault</div>
+            <div class="step-desc">On first visit, click "Create New Private Vault". A cryptographically random five-word key is generated in your browser. Save it — it's the only way to access your data. No email, no password, no account.</div>
           </div>
         </div>
         <div class="how-step" data-step="1">
           <div class="step-num">02</div>
           <div class="step-content">
-            <div class="step-title">Upload your GPX files</div>
-            <div class="step-desc">Drag and drop one or dozens of .gpx files onto the upload zone. Each file is parsed, stored in PostGIS, and immediately visible on the map.</div>
+            <div class="step-title">Request your GDPR export</div>
+            <div class="step-desc">Under GDPR Article 20 your sports watch manufacturer must provide all your data on request. Download your export — it contains GPX files for every activity you've ever recorded.</div>
           </div>
         </div>
         <div class="how-step" data-step="2">
           <div class="step-num">03</div>
           <div class="step-content">
-            <div class="step-title">Explore your trails</div>
-            <div class="step-desc">Zoom into a specific route, pan across continents, or see all your tracks at once. The world is your canvas.</div>
+            <div class="step-title">Upload &amp; visualize</div>
+            <div class="step-desc">Drag and drop your GPX files onto the upload zone. Each file is parsed, stored in PostGIS under your vault key, and immediately rendered on the map — color-coded by activity type.</div>
           </div>
         </div>
         <div class="how-step" data-step="3">
           <div class="step-num">04</div>
           <div class="step-content">
-            <div class="step-title">Use the API</div>
-            <div class="step-desc">Query tracks as GeoJSON, upload via curl, or health-check the service. Build integrations with any tool that speaks HTTP.</div>
+            <div class="step-title">Explore your trails</div>
+            <div class="step-desc">Pan across continents, zoom into a single run in Munich, filter by activity. Every adventure you've ever recorded — on one living map that only you can see.</div>
           </div>
         </div>
       </div>
@@ -973,8 +988,8 @@ services:
 <section class="section install-section">
   <div class="install-bg"></div>
   <div class="section-inner install-inner">
-    <h2 class="install-title">Start mapping your trails<br>right now</h2>
-    <p class="install-sub">Free, open source, MIT licensed. Fork it, adapt it, make it yours.</p>
+    <h2 class="install-title">Try it now.<br>Own it forever.</h2>
+    <p class="install-sub">Live demo available for 30 days — no account, just your secret key. Or self-host in under two minutes with Docker. Free, open source, MIT licensed.</p>
     <div>
       <div class="install-cmd">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
@@ -982,12 +997,13 @@ services:
       </div>
     </div>
     <div style="display:flex;align-items:center;justify-content:center;gap:var(--space-4);flex-wrap:wrap;">
-      <a href="https://github.com/wenzelt/trailblaze-gpx-viewer" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="font-size:var(--text-base);padding:var(--space-4) var(--space-8);">
+      <a href="https://trailblaze.up.railway.app" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="font-size:var(--text-base);padding:var(--space-4) var(--space-8);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        Try Live Demo
+      </a>
+      <a href="https://github.com/wenzelt/trailblaze-gpx-viewer" target="_blank" rel="noopener noreferrer" class="btn btn-ghost" style="font-size:var(--text-base);padding:var(--space-4) var(--space-8);">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
         Star on GitHub
-      </a>
-      <a href="https://github.com/wenzelt/trailblaze-gpx-viewer/fork" target="_blank" rel="noopener noreferrer" class="btn btn-ghost" style="font-size:var(--text-base);padding:var(--space-4) var(--space-8);">
-        Fork &amp; extend
       </a>
     </div>
   </div>
