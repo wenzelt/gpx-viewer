@@ -398,7 +398,7 @@ def index() -> FileResponse:
 
 
 @app.post("/upload", response_model=None)
-@limiter.limit("20/second")
+@limiter.limit("20/minute")
 async def upload_gpx(
     request: Request,
     files = File(...),
@@ -516,7 +516,7 @@ def _build_tracks_serialized(
 
 
 @app.get("/tracks")
-@limiter.limit("20/second")
+@limiter.limit("60/minute")
 def get_tracks(
     request: Request,
     limit: int | None = Query(default=None, ge=1, le=TRACKS_PAGE_MAX),
@@ -556,7 +556,7 @@ def get_tracks(
 
 
 @app.delete("/delete_all")
-@limiter.limit("5/minute")
+@limiter.limit("3/minute")
 def delete_all_tracks(request: Request, user_id: str = Depends(get_user_id)) -> dict[str, int | str]:
     with SessionLocal() as db:
         result = db.execute(delete(Track).where(Track.user_id == user_id))
@@ -568,7 +568,7 @@ def delete_all_tracks(request: Request, user_id: str = Depends(get_user_id)) -> 
 
 
 @app.post("/auth/create")
-@limiter.limit("10/minute")
+@limiter.limit("5/minute")
 def create_vault(request: Request, user_id: str = Depends(get_user_id)) -> dict[str, str]:
     """Explicitly initialize a new vault/user."""
     with SessionLocal() as db:
@@ -581,7 +581,7 @@ def create_vault(request: Request, user_id: str = Depends(get_user_id)) -> dict[
 
 
 @app.delete("/account")
-@limiter.limit("5/minute")
+@limiter.limit("2/minute")
 def delete_account(request: Request, user_id: str = Depends(get_user_id)) -> dict[str, str]:
     """Delete the entire account and all associated tracks."""
     with SessionLocal() as db:
