@@ -89,7 +89,8 @@ The `/tracks` endpoint uses a user-versioned cache. If no data has changed for t
 ### Privacy & Data Isolation
 TrailBlaze is designed to be exposed publicly while keeping every user's data 100% private:
 - **Anonymous Authentication**: Your "account" is identified solely by a secret multi-word key.
-- **Cryptographic Hashing**: The backend never sees or stores your raw key; it only stores a one-way hash.
+- **Local Storage Auto-Login**: Your seed phrase is stored locally in your browser's `localStorage`. This allows the app to seamlessly auto-login when you revisit, keeping your secret key on your device rather than on our servers.
+- **Cryptographic Hashing**: The backend never sees or stores your raw key; it only stores a one-way hash (combined with a server-side pepper).
 - **Complete Erasure**: The "Delete Vault" feature fulfills the GDPR Right to Erasure, instantly wiping all your tracks and your hashed identifier from the database.
 
 ## ⚙️ Configuration
