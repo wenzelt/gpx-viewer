@@ -13,7 +13,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from starlette.requests import Request
 
 import main
-from main import UploadOutcome, delete_all_tracks, get_tracks, get_user_id, health, upload_gpx
+from main import UploadOutcome, delete_all_tracks, delete_account, create_vault, get_tracks, get_user_id, health, upload_gpx
 from models import User
 
 # Compute TEST_USER_ID the same way get_user_id does, using the test pepper set in conftest.py
@@ -213,3 +213,85 @@ def test_delete_all_tracks_invalidates_cache(monkeypatch):
     assert payload == {"status": "ok", "deleted": 3}
     assert session.committed
     assert invalidated
+
+
+# ── create_vault ─────────────────────────────────────────────────────────────
+
+def test_create_vault_creates_new_user(monkeypatch):
+    """When no user record exists, create_vault should insert one and return ok."""
+    class NoUserSession(DummySession):
+        def get(self, model, pk):
+            return None  # user does not exist yet
+
+    session = NoUserSession()
+    monkeypatch.setattr(main, "SessionLocal", lambda: session)
+
+    req = _mock_request("/auth/create", "POST")
+    result = create_vault(request=req, user_id=TEST_USER_ID)
+
+    assert result == {"status": "ok", "user_id": TEST_USER_ID}
+    assert any(isinstance(obj, User) for obj in session.added), "a User should have been added"
+    assert session.committed
+
+
+def test_create_vault_is_idempotent(monkeypatch):
+    """When user already exists, create_vault should not create a duplicate and still return ok."""
+    session = DummySession()  # DummySession.get returns User for TEST_USER_ID
+
+    monkeypatch.setattr(main, "SessionLocal", lambda: session)
+
+    req = _mock_request("/auth/create", "POST")
+    result = create_vault(request=req, user_id=TEST_USER_ID)
+
+    assert result == {"status": "ok", "user_id": TEST_USER_ID}
+    assert not session.added, "no new User should be added when one already exists"
+
+
+# ── delete_account ───────────────────────────────────────────────────────────
+
+def test_delete_account_removes_existing_user_and_invalidates_cache(monkeypatch):
+    """delete_account should delete the user record and invalidate the track cache."""
+    deleted_objects = []
+
+    class DeletableSession(DummySession):
+        def delete(self, obj):
+            deleted_objects.append(obj)
+
+    session = DeletableSession()
+    monkeypatch.setattr(main, "SessionLocal", lambda: session)
+
+    invalidated = []
+    monkeypatch.setattr(main.tracks_cache, "invalidate", lambda uid: invalidated.append(uid))
+
+    req = _mock_request("/account", "DELETE")
+    result = delete_account(request=req, user_id=TEST_USER_ID)
+
+    assert result == {"status": "ok"}
+    assert any(isinstance(obj, User) for obj in deleted_objects), "User should be deleted"
+    assert session.committed
+    assert TEST_USER_ID in invalidated
+
+
+def test_delete_account_graceful_when_user_missing(monkeypatch):
+    """delete_account should return ok even when the user does not exist in the DB.
+
+    Scenario: new deployment with empty DB, user restores an old seed key.
+    The hashed user_id doesn't match any record — delete should still succeed
+    so the client can clear its localStorage and start fresh.
+    """
+    class NoUserSession(DummySession):
+        def get(self, model, pk):
+            return None  # user not found
+
+    session = NoUserSession()
+    monkeypatch.setattr(main, "SessionLocal", lambda: session)
+
+    invalidated = []
+    monkeypatch.setattr(main.tracks_cache, "invalidate", lambda uid: invalidated.append(uid))
+
+    req = _mock_request("/account", "DELETE")
+    result = delete_account(request=req, user_id=TEST_USER_ID)
+
+    assert result == {"status": "ok"}
+    assert not session.committed, "nothing to commit when user does not exist"
+    assert TEST_USER_ID in invalidated, "cache should still be invalidated"

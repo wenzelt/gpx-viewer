@@ -342,11 +342,20 @@
       hideVaultOnboarding();
     });
 
-    document.getElementById('restoreVaultBtn').addEventListener('click', () => {
+    document.getElementById('restoreVaultBtn').addEventListener('click', async () => {
       const val = restoreSeedInput.value.trim().toLowerCase();
       if (val.length < 5) return;
       activeSeed = val;
       localStorage.setItem('trailblaze_seed', activeSeed);
+      // Ensure a user record exists for this seed so vault operations (delete, etc.) work correctly.
+      try {
+        await fetch('/auth/create', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${activeSeed}` }
+        });
+      } catch (err) {
+        console.warn('Could not register restored vault on server:', err);
+      }
       hideVaultOnboarding();
     });
 
@@ -659,6 +668,8 @@
     }
 
     async function loadTracks({ force = false } = {}) {
+      if (!activeSeed) return;
+
       if (activeTracksController) {
         activeTracksController.abort();
       }
