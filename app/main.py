@@ -42,7 +42,7 @@ from models import Track, User
 # ------------------------------------------------------------------------------
 # Settings
 # ------------------------------------------------------------------------------
-MAX_UPLOAD_MB: int = int(os.environ.get("MAX_UPLOAD_MB", "50"))
+MAX_UPLOAD_MB: int = int(os.environ.get("MAX_UPLOAD_MB", "5"))
 MAX_UPLOAD_BYTES: int = MAX_UPLOAD_MB * 1024 * 1024
 ALLOWED_ORIGINS: list[str] = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
 CORS_ALLOW_CREDENTIALS: bool = os.environ.get(

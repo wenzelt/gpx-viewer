@@ -28,7 +28,7 @@ services:
       APP_SECRET_PEPPER: ${APP_SECRET_PEPPER}
       UVICORN_HOST: 0.0.0.0
       UVICORN_PORT: 8000
-      MAX_UPLOAD_MB: "50"
+      MAX_UPLOAD_MB: "5"
       # optional: comma-separated list for stricter CORS in prod
       # ALLOWED_ORIGINS: "https://your.domain"
     depends_on:
