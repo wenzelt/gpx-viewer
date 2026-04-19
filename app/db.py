@@ -7,9 +7,26 @@ from sqlalchemy.pool import NullPool, StaticPool
 
 from models import Base
 
-DB_DSN = os.environ.get("DB_DSN")
-if not DB_DSN:
-    raise RuntimeError("DB_DSN environment variable is required")
+def _resolve_dsn() -> str:
+    """Return a SQLAlchemy-compatible DSN.
+
+    Accepts either DB_DSN (preferred) or DATABASE_URL (Railway Postgres plugin).
+    Strips accidental whitespace and rewrites the postgres:// scheme that
+    Railway emits to the psycopg2 dialect SQLAlchemy requires.
+    """
+    raw = os.environ.get("DB_DSN") or os.environ.get("DATABASE_URL")
+    if not raw or not raw.strip():
+        raise RuntimeError(
+            "No database URL found. Set DB_DSN or DATABASE_URL."
+        )
+    dsn = raw.strip()
+    # Railway's Postgres plugin uses postgres:// — SQLAlchemy needs postgresql+psycopg2://
+    if dsn.startswith("postgres://"):
+        dsn = "postgresql+psycopg2://" + dsn[len("postgres://"):]
+    return dsn
+
+
+DB_DSN = _resolve_dsn()
 
 engine_kwargs: dict[str, object] = {"echo": False, "future": True}
 
