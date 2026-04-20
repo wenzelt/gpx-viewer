@@ -286,6 +286,11 @@
       console.warn('Could not fetch /api/config — using production defaults');
     }
 
+    const RATE_LIMIT_MSG =
+      "You've hit the request limit. TrailBlaze is a personal demo — " +
+      "please wait a moment and try again. For heavy use, consider running " +
+      "the open-source version locally.";
+
     // Returns auth headers for fetch/XHR calls; empty in local mode.
     function authHeaders() {
       if (localMode) return {};
@@ -598,6 +603,7 @@
           method: "DELETE",
           headers: authHeaders()
         });
+        if (res.status === 429) { showStatus("Slow down", RATE_LIMIT_MSG, "error"); return; }
         if (!res.ok) throw new Error(await res.text());
         layer.clearLayers();
         statsBar.classList.add('hidden');
@@ -671,6 +677,11 @@
               statusText.textContent = "Failed (bad response)";
             }
             resolve();
+          } else if (xhr.status === 429) {
+            bar.style.background = "#e8a543";
+            statusText.textContent = "Rate limit reached — please wait a moment";
+            showStatus("Slow down", RATE_LIMIT_MSG, "error");
+            reject();
           } else {
             bar.style.background = "#e06060";
             statusText.textContent = "Failed (server error)";
@@ -727,6 +738,11 @@
         const res = await fetch('/tracks', { signal: controller.signal, headers });
 
         if (res.status === 304) {
+          return;
+        }
+
+        if (res.status === 429) {
+          showStatus("Slow down", RATE_LIMIT_MSG, "error");
           return;
         }
 
