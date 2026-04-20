@@ -215,8 +215,8 @@
         </div>
       </div>
 
-      <!-- Upload consent notice -->
-      <p class="text-xs text-gray-500 text-center mb-4">
+      <!-- Upload consent notice (hidden in local mode) -->
+      <p id="uploadConsent" class="text-xs text-gray-500 text-center mb-4">
         By uploading you confirm these are your own tracks and consent to their storage. See <a href="/datenschutz" class="underline hover:text-gray-300">Datenschutz</a>.
       </p>
 
@@ -265,7 +265,7 @@
 
     <footer class="py-6 mt-8 text-center text-gray-500 text-sm">
       <p>Made with <i data-feather="heart" class="inline w-4 h-4 text-red-400"></i> for outdoor adventures</p>
-      <p class="mt-2 space-x-4">
+      <p id="legalLinks" class="mt-2 space-x-4">
         <a href="/impressum" class="hover:text-gray-300 transition-colors">Impressum</a>
         <span>·</span>
         <a href="/datenschutz" class="hover:text-gray-300 transition-colors">Datenschutz</a>
@@ -274,7 +274,24 @@
   </div>
 
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
+    // ── Server config ───────────────────────────────────────────
+    let localMode = false;
+    let maxFilesPerRequest = 50;
+    try {
+      const cfg = await fetch('/api/config').then(r => r.json());
+      localMode = cfg.local_mode ?? false;
+      maxFilesPerRequest = cfg.max_files_per_request ?? 50;
+    } catch {
+      console.warn('Could not fetch /api/config — using production defaults');
+    }
+
+    // Returns auth headers for fetch/XHR calls; empty in local mode.
+    function authHeaders() {
+      if (localMode) return {};
+      return activeSeed ? { 'Authorization': `Bearer ${activeSeed}` } : {};
+    }
+
     // ── Vault & Auth Logic ──────────────────────────────────────
     const wordlist = [
       "alpine", "amber", "arctic", "azure", "bamboo", "basalt", "beacon", "birch", "blaze", "boulder",
@@ -338,11 +355,11 @@
       
       // Initialize on backend
       try {
+        activeSeed = seed;
         await fetch('/auth/create', {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${seed}` }
+          headers: authHeaders()
         });
-        activeSeed = seed;
       } catch (err) {
         console.error("Failed to init vault", err);
       }
@@ -362,7 +379,7 @@
       try {
         await fetch('/auth/create', {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${activeSeed}` }
+          headers: authHeaders()
         });
       } catch (err) {
         console.warn('Could not register restored vault on server:', err);
@@ -386,7 +403,7 @@
       try {
         await fetch('/account', {
           method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${activeSeed}` }
+          headers: authHeaders()
         });
         localStorage.removeItem('trailblaze_seed');
         location.reload();
@@ -409,7 +426,12 @@
       });
     });
 
-    if (!activeSeed) {
+    if (localMode) {
+      // Local mode: hide vault controls and legal links, no auth needed.
+      document.getElementById('vaultSettingsBtn').classList.add('hidden');
+      document.getElementById('uploadConsent').classList.add('hidden');
+      document.getElementById('legalLinks').classList.add('hidden');
+    } else if (!activeSeed) {
       showVaultOnboarding();
     }
 
@@ -572,9 +594,9 @@
       deleteAllBtn.disabled = true;
       deleteAllBtn.classList.add('opacity-60', 'cursor-not-allowed');
       try {
-        const res = await fetch("/delete_all", { 
+        const res = await fetch("/delete_all", {
           method: "DELETE",
-          headers: { 'Authorization': `Bearer ${activeSeed}` }
+          headers: authHeaders()
         });
         if (!res.ok) throw new Error(await res.text());
         layer.clearLayers();
@@ -663,7 +685,8 @@
         };
 
         xhr.open("POST", "/upload");
-        xhr.setRequestHeader("Authorization", `Bearer ${activeSeed}`);
+        const ah = authHeaders();
+        if (ah['Authorization']) xhr.setRequestHeader("Authorization", ah['Authorization']);
         xhr.send(fd);
       });
     }
@@ -681,7 +704,7 @@
     }
 
     async function loadTracks({ force = false } = {}) {
-      if (!activeSeed) return;
+      if (!localMode && !activeSeed) return;
 
       if (activeTracksController) {
         activeTracksController.abort();
@@ -692,9 +715,9 @@
 
       toggleMapLoader(true, force ? 'Refreshing tracks…' : 'Loading tracks…');
 
-      const headers = { 
+      const headers = {
         'Cache-Control': 'no-cache',
-        'Authorization': `Bearer ${activeSeed}`
+        ...authHeaders()
       };
       if (!force && currentTracksEtag) {
         headers['If-None-Match'] = currentTracksEtag;

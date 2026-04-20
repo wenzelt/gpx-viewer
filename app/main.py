@@ -43,6 +43,10 @@ from models import Track, User
 # ------------------------------------------------------------------------------
 # Settings
 # ------------------------------------------------------------------------------
+APP_ENV: str = os.getenv("APP_ENV", "local")   # "local" | "production"
+LOCAL_MODE: bool = APP_ENV == "local"
+LOCAL_USER_ID: str = "local"
+
 MAX_UPLOAD_MB: int = int(os.environ.get("MAX_UPLOAD_MB", "5"))
 MAX_UPLOAD_BYTES: int = MAX_UPLOAD_MB * 1024 * 1024
 ALLOWED_ORIGINS: list[str] = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
@@ -51,19 +55,30 @@ CORS_ALLOW_CREDENTIALS: bool = os.environ.get(
 ).strip().lower() in {"1", "true", "yes", "on"}
 TRACKS_PAGE_MAX: int = int(os.environ.get("TRACKS_PAGE_MAX", "1000"))
 GEOM_SIMPLIFY_TOLERANCE: float = float(os.environ.get("GEOM_SIMPLIFY_TOLERANCE", "0.00002"))
-# Server-side salt to prevent rainbow table attacks on seed phrase hashes.
-# Must be set via environment variable — no insecure default allowed.
-APP_SECRET_PEPPER: str = os.environ["APP_SECRET_PEPPER"]
+# Server-side salt: required in production, unused in local mode.
+APP_SECRET_PEPPER: str = (
+    os.environ.get("APP_SECRET_PEPPER", "local-only-unused")
+    if LOCAL_MODE
+    else os.environ["APP_SECRET_PEPPER"]
+)
 
-APP_TITLE = "Local GPX Viewer"
+APP_TITLE = "TrailBlaze GPX Viewer"
 APP_VERSION = "1.3"
-MAX_FILES_PER_REQUEST: int = 50
+MAX_FILES_PER_REQUEST: int = int(
+    os.environ.get("MAX_FILES_PER_REQUEST", "500" if LOCAL_MODE else "50")
+)
 MIN_SEED_PHRASE_LEN: int = 8
 
 # ------------------------------------------------------------------------------
 # App & Middleware
 # ------------------------------------------------------------------------------
-limiter = Limiter(key_func=get_remote_address)
+class _NoopLimiter:
+    """No-operation rate limiter used in local mode."""
+    def limit(self, *args: Any, **kwargs: Any) -> Callable[[Any], Any]:
+        return lambda f: f
+
+
+limiter: Any = _NoopLimiter() if LOCAL_MODE else Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
@@ -73,12 +88,20 @@ async def _lifespan(app: FastAPI):
 
 
 app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=_lifespan)
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+if not LOCAL_MODE:
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=not LOCAL_MODE)
 
-def get_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+
+def get_user_id(credentials: HTTPAuthorizationCredentials | None = Depends(security)) -> str:
+    if LOCAL_MODE:
+        return LOCAL_USER_ID
+
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
     seed_phrase = credentials.credentials
     if len(seed_phrase) < MIN_SEED_PHRASE_LEN:
         raise HTTPException(status_code=401, detail=f"Seed phrase must be at least {MIN_SEED_PHRASE_LEN} characters")
@@ -393,6 +416,15 @@ async def _process_upload_file(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "time_utc": datetime.now(timezone.utc).isoformat()}
+
+
+@app.get("/api/config")
+def get_config() -> dict[str, Any]:
+    """Return server-side feature flags for the frontend."""
+    return {
+        "local_mode": LOCAL_MODE,
+        "max_files_per_request": MAX_FILES_PER_REQUEST,
+    }
 
 
 @app.get("/impressum", response_class=HTMLResponse)

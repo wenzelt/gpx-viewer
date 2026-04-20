@@ -13,7 +13,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from starlette.requests import Request
 
 import main
-from main import UploadOutcome, delete_all_tracks, delete_account, create_vault, get_tracks, get_user_id, health, upload_gpx, serve_impressum, serve_datenschutz
+from main import UploadOutcome, delete_all_tracks, delete_account, create_vault, get_tracks, get_user_id, health, upload_gpx, serve_impressum, serve_datenschutz, get_config
 from models import User
 
 # Compute TEST_USER_ID the same way get_user_id does, using the test pepper set in conftest.py
@@ -270,6 +270,35 @@ def test_delete_account_removes_existing_user_and_invalidates_cache(monkeypatch)
     assert any(isinstance(obj, User) for obj in deleted_objects), "User should be deleted"
     assert session.committed
     assert TEST_USER_ID in invalidated
+
+
+# ── legal pages ─────────────────────────────────────────────────────────────
+
+# ── /api/config ──────────────────────────────────────────────────────────────
+
+def test_get_config_returns_production_mode():
+    """In the test suite (APP_ENV=production), config reports local_mode=False."""
+    result = get_config()
+    assert result["local_mode"] is False
+    assert "max_files_per_request" in result
+    assert result["max_files_per_request"] == 50
+
+
+def test_get_config_local_mode(monkeypatch):
+    """When LOCAL_MODE is patched to True, config reports local_mode=True."""
+    monkeypatch.setattr(main, "LOCAL_MODE", True)
+    monkeypatch.setattr(main, "MAX_FILES_PER_REQUEST", 500)
+    result = get_config()
+    assert result["local_mode"] is True
+    assert result["max_files_per_request"] == 500
+
+
+def test_get_user_id_local_mode_returns_fixed_id(monkeypatch):
+    """In local mode, get_user_id returns LOCAL_USER_ID without any credentials."""
+    monkeypatch.setattr(main, "LOCAL_MODE", True)
+    result = get_user_id(None)
+    assert result == main.LOCAL_USER_ID
+    assert result == "local"
 
 
 # ── legal pages ─────────────────────────────────────────────────────────────
