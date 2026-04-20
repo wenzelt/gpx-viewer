@@ -332,6 +332,7 @@
     document.getElementById('createVaultBtn').addEventListener('click', async () => {
       const seed = generateSeed();
       generatedSeedText.textContent = seed;
+      generatedSeedText.dataset.seed = seed;
       onboardingActions.classList.add('hidden');
       seedDisplay.classList.remove('hidden');
       
@@ -371,6 +372,7 @@
 
     document.getElementById('vaultSettingsBtn').addEventListener('click', () => {
       settingsSeedText.textContent = activeSeed;
+      settingsSeedText.dataset.seed = activeSeed;
       settingsModal.classList.remove('hidden');
     });
 
@@ -395,12 +397,13 @@
 
     [generatedSeedText, settingsSeedText].forEach(el => {
       el.addEventListener('click', () => {
-        navigator.clipboard.writeText(el.textContent);
-        const oldText = el.textContent;
+        const seed = el.dataset.seed;
+        if (!seed) return;
+        navigator.clipboard.writeText(seed);
         el.textContent = "Copied to clipboard!";
         el.classList.add('text-white');
         setTimeout(() => {
-          el.textContent = oldText;
+          el.textContent = seed;
           el.classList.remove('text-white');
         }, 1500);
       });
