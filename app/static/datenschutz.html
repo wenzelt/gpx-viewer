@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Datenschutzerklärung — TrailBlaze</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <link rel="stylesheet" href="/static/tailwind-dist.css">
+  <style>
+    body { background: #111827; color: #d1d5db; font-family: system-ui, sans-serif; }
+    h1 { color: #f9fafb; font-size: 1.875rem; font-weight: 700; margin-bottom: 1rem; }
+    h2 { color: #e5e7eb; font-size: 1.25rem; font-weight: 600; margin-top: 2rem; margin-bottom: 0.5rem; border-top: 1px solid #1f2937; padding-top: 1rem; }
+    h3 { color: #d1d5db; font-size: 1rem; font-weight: 600; margin-top: 1rem; margin-bottom: 0.25rem; }
+    p { margin-bottom: 0.75rem; line-height: 1.7; }
+    ul { margin-left: 1.5rem; margin-bottom: 0.75rem; list-style: disc; }
+    li { margin-bottom: 0.35rem; line-height: 1.7; }
+    a { color: #6ee7b7; text-decoration: underline; }
+    a:hover { color: #a7f3d0; }
+    strong { color: #e5e7eb; }
+    .note { background: #1f2937; border-left: 3px solid #6ee7b7; padding: 0.75rem 1rem; border-radius: 0 0.375rem 0.375rem 0; margin-bottom: 1rem; font-size: 0.9rem; }
+    .seal { font-size: 0.75rem; margin-top: 2rem; color: #6b7280; }
+  </style>
+</head>
+<body>
+  <div style="max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem;">
+    <a href="/" style="display:inline-flex;align-items:center;gap:0.5rem;color:#6ee7b7;text-decoration:none;margin-bottom:2rem;font-size:0.875rem;">
+      ← Zurück zur App
+    </a>
+
+    <h1>Datenschutzerklärung</h1>
+    <p style="color:#9ca3af;font-size:0.875rem;">Stand: 20. April 2026</p>
+
+    <div class="note">
+      <strong>Hinweis zur Privatheit:</strong> TrailBlaze ist ein Privacy-by-Design-Dienst. Es wird kein Name, keine E-Mail-Adresse und kein Passwort gespeichert. Der Zugang erfolgt ausschließlich über eine selbst gewählte Seed-Phrase, von der serverseitig nur ein gesalzener SHA-256-Hash abgelegt wird. Hochgeladene Tracks sind ausschließlich für den jeweiligen Nutzer selbst sichtbar.
+    </div>
+
+    <h2 id="m716">1. Präambel</h2>
+    <p>Mit der folgenden Datenschutzerklärung informieren wir Sie darüber, welche personenbezogenen Daten wir zu welchen Zwecken und in welchem Umfang verarbeiten. Die Datenschutzerklärung gilt für alle Verarbeitungen, die im Rahmen der Nutzung von TrailBlaze stattfinden.</p>
+
+    <h2 id="m3">2. Verantwortlicher</h2>
+    <p>T Wenzel Consulting LLC<br>323 Margaret St<br>33040 Key West, USA</p>
+    <p><strong>Vertreten durch:</strong> Tom Wenzel</p>
+    <p><strong>E-Mail:</strong> <a href="mailto:tomlukaswenzel@yahoo.de">tomlukaswenzel@yahoo.de</a></p>
+
+    <h2 id="m-gpx">3. GPX-Tracks als personenbezogene Daten</h2>
+    <p>GPX-Tracks sind keine trivialen Daten. <strong>Standortdaten zählen gemäß Art. 4 Abs. 1 DSGVO zu den personenbezogenen Daten</strong>, sofern sie einer natürlichen Person zugeordnet werden können. Bewegungsprofile aus GPS-Tracks erlauben häufig Rückschlüsse auf Personen (z. B. Wohnort, Freizeitgewohnheiten), selbst wenn kein Name gespeichert wird.</p>
+    <p>Daher behandeln wir alle hochgeladenen GPX-Dateien als personenbezogene Daten im Sinne der DSGVO.</p>
+    <p><strong>Wichtig:</strong> Nutzer dürfen ausschließlich GPX-Tracks hochladen, die sie selbst aufgezeichnet haben oder für die sie das ausdrückliche Einverständnis der betroffenen Personen besitzen. Das Hochladen von Tracks Dritter ohne deren Einwilligung ist unzulässig.</p>
+
+    <h2 id="mOverview">4. Übersicht der verarbeiteten Daten</h2>
+    <h3>Verarbeitete Datenarten</h3>
+    <ul>
+      <li><strong>GPX-Tracks (Standortdaten):</strong> Vom Nutzer hochgeladene GPS-Routen, die gemäß Art. 4 Abs. 1 DSGVO personenbezogene Daten darstellen können</li>
+      <li><strong>IP-Adressen:</strong> Werden beim Upload und jedem Seitenaufruf serverseitig in Logfiles erfasst</li>
+      <li><strong>Authentifizierungshash:</strong> SHA-256-Hash der Seed-Phrase (kein Klartext, kein Passwort, keine E-Mail)</li>
+      <li><strong>Server-Logfiles:</strong> Zeitstempel, aufgerufene URLs, HTTP-Statuscodes, Browsertyp (User-Agent)</li>
+    </ul>
+    <h3>Kategorien betroffener Personen</h3>
+    <ul>
+      <li>Nutzer der Webanwendung TrailBlaze</li>
+    </ul>
+    <h3>Zwecke der Verarbeitung</h3>
+    <ul>
+      <li>Bereitstellung der Kernfunktion (Speicherung und Visualisierung eigener GPX-Tracks)</li>
+      <li>Nutzertrennung und Zugriffskontrolle (Vault-System)</li>
+      <li>Sicherheit und Missbrauchsschutz (Rate-Limiting, Logfiles)</li>
+    </ul>
+
+    <h2 id="m2427">5. Rechtsgrundlagen</h2>
+    <p>Die Verarbeitung personenbezogener Daten erfolgt auf folgenden Rechtsgrundlagen:</p>
+    <ul>
+      <li><strong>Einwilligung (Art. 6 Abs. 1 lit. a DSGVO):</strong> Der Nutzer lädt bewusst eigene GPX-Tracks hoch und stimmt dadurch der Speicherung zu. Der Hinweis beim Upload macht dies transparent.</li>
+      <li><strong>Berechtigte Interessen (Art. 6 Abs. 1 lit. f DSGVO):</strong> Verarbeitung von IP-Adressen und Logfiles zur Sicherstellung des Betriebs und zur Abwehr von Missbrauch.</li>
+    </ul>
+
+    <h2 id="m-hosting">6. Hosting und Server-Standort</h2>
+    <p>TrailBlaze wird über <strong>Railway</strong> (Railway Corp., San Francisco, CA, USA) gehostet, wobei ausschließlich die Region <strong>eu-west (Amsterdam, Niederlande)</strong> verwendet wird. Sämtliche Nutzerdaten — einschließlich GPX-Tracks, Authentifizierungshashes und Logfiles — werden auf Servern innerhalb der Europäischen Union gespeichert und verarbeitet. <strong>Es findet kein Transfer personenbezogener Daten in Drittländer statt.</strong></p>
+    <p><strong>Weitere Informationen:</strong> <a href="https://railway.app/legal/privacy" target="_blank" rel="noopener">Railway Datenschutzrichtlinie</a></p>
+
+    <h2 id="m27">7. Sicherheitsmaßnahmen</h2>
+    <ul>
+      <li><strong>HTTPS/TLS:</strong> Alle Verbindungen sind verschlüsselt</li>
+      <li><strong>Kein Klartextpasswort:</strong> Die Seed-Phrase verlässt den Browser nur als HTTPS-Bearer-Token; gespeichert wird ausschließlich ein gesalzener SHA-256-Hash</li>
+      <li><strong>Nutzertrennung:</strong> Jeder Nutzer sieht ausschließlich eigene Tracks — keine geteilten Datensätze</li>
+      <li><strong>Rate-Limiting:</strong> Upload- und Login-Endpunkte sind gegen Brute-Force geschützt</li>
+      <li><strong>Datensparsamkeit:</strong> Es werden keine Cookies gesetzt, kein Tracking, keine Analytics</li>
+    </ul>
+
+    <h3>Hinweis zur Verschlüsselung gespeicherter Daten (At-Rest Encryption)</h3>
+    <p>Im Sinne vollständiger Transparenz weisen wir darauf hin, dass die hochgeladenen GPX-Tracks in der Datenbank <strong>nicht verschlüsselt</strong> gespeichert werden. Die Seed-Phrase dient ausschließlich der Zugangskontrolle (Authentifizierung), nicht der Verschlüsselung der gespeicherten Koordinatendaten.</p>
+    <p>Das bedeutet konkret: Personen mit direktem Datenbankzugriff — etwa im Fall eines Datenbankdumps oder durch den Hosting-Anbieter — könnten die gespeicherten Koordinaten im Klartext lesen. Der Schutz der Daten beruht auf der Zugriffskontrolle der Infrastruktur (Railway eu-west, Amsterdam) sowie der Nutzertrennung auf Anwendungsebene.</p>
+    <p>Eine clientseitige Verschlüsselung der Tracks mit der Seed-Phrase wäre technisch möglich, würde jedoch serverseitige Geodatenverarbeitung (z. B. räumliche Datenbankabfragen via PostGIS) ausschließen. Diese Abwägung wird hier transparent offengelegt.</p>
+
+    <h2 id="m12">8. Datenspeicherung und Löschung</h2>
+    <ul>
+      <li><strong>GPX-Tracks:</strong> Werden gespeichert, bis der Nutzer sie manuell löscht oder das Vault löscht</li>
+      <li><strong>Authentifizierungshash:</strong> Wird zusammen mit dem Vault gelöscht</li>
+      <li><strong>Server-Logfiles (IP-Adressen):</strong> Werden nach maximal 30 Tagen automatisch gelöscht oder anonymisiert</li>
+    </ul>
+    <p>Nutzer können jederzeit alle eigenen Daten über die Funktion <em>"Vault löschen"</em> in der App vollständig und unwiderruflich entfernen (Recht auf Löschung gemäß Art. 17 DSGVO).</p>
+
+    <h2 id="m10">9. Rechte der betroffenen Personen</h2>
+    <p>Gemäß Art. 15–21 DSGVO stehen Ihnen folgende Rechte zu:</p>
+    <ul>
+      <li><strong>Auskunftsrecht (Art. 15 DSGVO)</strong></li>
+      <li><strong>Recht auf Berichtigung (Art. 16 DSGVO)</strong></li>
+      <li><strong>Recht auf Löschung / „Recht auf Vergessenwerden" (Art. 17 DSGVO)</strong> — direkt über die App ausübbar</li>
+      <li><strong>Recht auf Einschränkung der Verarbeitung (Art. 18 DSGVO)</strong></li>
+      <li><strong>Recht auf Datenübertragbarkeit (Art. 20 DSGVO)</strong> — GPX-Dateien können jederzeit heruntergeladen werden</li>
+      <li><strong>Widerspruchsrecht (Art. 21 DSGVO)</strong></li>
+      <li><strong>Widerrufsrecht bei Einwilligungen (Art. 7 Abs. 3 DSGVO)</strong></li>
+      <li><strong>Beschwerderecht bei einer Aufsichtsbehörde (Art. 77 DSGVO)</strong></li>
+    </ul>
+    <p>Zur Ausübung Ihrer Rechte wenden Sie sich an: <a href="mailto:tomlukaswenzel@yahoo.de">tomlukaswenzel@yahoo.de</a></p>
+
+    <h2 id="m-dritte">10. Nutzungsbeschränkung — Tracks Dritter</h2>
+    <p>Das Hochladen von GPS-Tracks, die Bewegungsprofile anderer Personen enthalten, ist ohne deren ausdrückliche Einwilligung unzulässig. Nutzer sind selbst verantwortlich dafür, dass hochgeladene Daten keine personenbezogenen Daten Dritter enthalten, für die keine Rechtsgrundlage vorliegt.</p>
+
+    <h2 id="m225">11. Webhosting und Drittdienste</h2>
+    <h3>Railway (Hosting)</h3>
+    <p>Dienstanbieter: Railway Corp., San Francisco, CA, USA. Server-Standort: eu-west, Amsterdam, Niederlande (EU). <a href="https://railway.app/legal/privacy" target="_blank" rel="noopener">Datenschutzrichtlinie</a>. Rechtsgrundlage: berechtigte Interessen (Art. 6 Abs. 1 lit. f DSGVO). Kein Drittlandtransfer — Daten verbleiben in der EU.</p>
+
+    <h3>Google Fonts</h3>
+    <p>Bezug von Schriftarten von Google-Servern. IP-Adresse und Gerätedaten werden dabei an Google übermittelt. Dienstanbieter: Google Ireland Limited, Gordon House, Barrow Street, Dublin 4, Irland. <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Datenschutzerklärung</a>. Rechtsgrundlage: berechtigte Interessen (Art. 6 Abs. 1 lit. f DSGVO). Drittlandtransfer: Data Privacy Framework (DPF).</p>
+
+    <h3>Leaflet / CartoCDN (Kartenmaterial)</h3>
+    <p>Für die Kartendarstellung werden Kacheln von CartoCDN-Servern geladen. Dabei kann die IP-Adresse des Nutzers übertragen werden. Dienstanbieter: CARTO, Madrid, Spanien. <a href="https://carto.com/privacy" target="_blank" rel="noopener">Datenschutzerklärung</a>. Rechtsgrundlage: berechtigte Interessen (Art. 6 Abs. 1 lit. f DSGVO).</p>
+
+    <h2 id="m15">12. Änderung und Aktualisierung</h2>
+    <p>Diese Datenschutzerklärung wird bei Änderungen der Datenverarbeitungsprozesse angepasst. Bitte prüfen Sie sie regelmäßig.</p>
+
+    <p class="seal">Erstellt auf Basis des Datenschutz-Generators von Dr. Thomas Schwenke — angepasst für TrailBlaze.</p>
+  </div>
+</body>
+</html>

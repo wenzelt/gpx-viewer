@@ -21,7 +21,7 @@ import sqlalchemy
 import defusedxml.ElementTree as ET
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.encoders import jsonable_encoder
@@ -393,6 +393,16 @@ async def _process_upload_file(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "time_utc": datetime.now(timezone.utc).isoformat()}
+
+
+@app.get("/impressum", response_class=HTMLResponse)
+def serve_impressum() -> HTMLResponse:
+    return HTMLResponse(content=(STATIC_DIR / "impressum.html").read_text(encoding="utf-8"))
+
+
+@app.get("/datenschutz", response_class=HTMLResponse)
+def serve_datenschutz() -> HTMLResponse:
+    return HTMLResponse(content=(STATIC_DIR / "datenschutz.html").read_text(encoding="utf-8"))
 
 
 @app.get("/", response_class=FileResponse)

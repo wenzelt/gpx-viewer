@@ -13,7 +13,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from starlette.requests import Request
 
 import main
-from main import UploadOutcome, delete_all_tracks, delete_account, create_vault, get_tracks, get_user_id, health, upload_gpx
+from main import UploadOutcome, delete_all_tracks, delete_account, create_vault, get_tracks, get_user_id, health, upload_gpx, serve_impressum, serve_datenschutz
 from models import User
 
 # Compute TEST_USER_ID the same way get_user_id does, using the test pepper set in conftest.py
@@ -270,6 +270,25 @@ def test_delete_account_removes_existing_user_and_invalidates_cache(monkeypatch)
     assert any(isinstance(obj, User) for obj in deleted_objects), "User should be deleted"
     assert session.committed
     assert TEST_USER_ID in invalidated
+
+
+# ── legal pages ─────────────────────────────────────────────────────────────
+
+def test_serve_impressum_returns_html_with_expected_content():
+    """GET /impressum should return HTML containing key Impressum content."""
+    response = serve_impressum()
+    body = response.body.decode()
+    assert "T Wenzel Consulting" in body
+    assert "Impressum" in body
+    assert "<!DOCTYPE html>" in body
+
+
+def test_serve_datenschutz_returns_html_with_expected_content():
+    """GET /datenschutz should return HTML containing key DSGVO content."""
+    response = serve_datenschutz()
+    body = response.body.decode()
+    assert "Datenschutzerklärung" in body
+    assert "<!DOCTYPE html>" in body
 
 
 def test_delete_account_graceful_when_user_missing(monkeypatch):
